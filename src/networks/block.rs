@@ -1,36 +1,36 @@
-use ndarray::{ArrayBase, Ix2, IxDyn, OwnedRepr};
+use ndarray::ArrayD;
 
-use super::layer::Layer;
+use super::layer::{Layer, LearnableParameter};
 
-pub trait Block<D = IxDyn> {
-  fn forward(&mut self, input: ArrayBase<OwnedRepr<f64>, D>) -> ArrayBase<OwnedRepr<f64>, D>;
-  fn backward(&mut self, grad: ArrayBase<OwnedRepr<f64>, D>) -> ArrayBase<OwnedRepr<f64>, D>;
+pub struct Sequential {
+  layers: Vec<Box<dyn Layer>>,
 }
-
-pub struct Sequential<D> {
-  layers: Vec<Box<dyn Layer<D>>>,
-}
-
-impl<D> Sequential<D> {
-  pub fn new(layers: Vec<Box<dyn Layer<D>>>) -> Self {
-    Self { layers }
+impl Sequential {
+  pub fn new(layers: Vec<Box<dyn Layer>>) -> Self {
+    Sequential { layers }
   }
 }
 
-impl<D> Block<D> for Sequential<D> {
-  fn forward(&mut self, input: ArrayBase<OwnedRepr<f64>, D>) -> ArrayBase<OwnedRepr<f64>, D> {
+impl Layer for Sequential {
+  fn forward(&mut self, input: ArrayD<f64>) -> ArrayD<f64> {
     let mut output = input;
     for layer in &mut self.layers {
       output = layer.forward(output);
     }
     output
   }
-
-  fn backward(&mut self, grad: ArrayBase<OwnedRepr<f64>, D>) -> ArrayBase<OwnedRepr<f64>, D> {
-    let mut grad_output = grad;
+  fn backward(&mut self, grad: ArrayD<f64>) -> ArrayD<f64> {
+    let mut output = grad;
     for layer in self.layers.iter_mut().rev() {
-      grad_output = layer.backward(grad_output);
+      output = layer.backward(output);
     }
-    grad_output
+    output
+  }
+  fn params_mut(&mut self) -> Vec<&mut LearnableParameter> {
+    self
+      .layers
+      .iter_mut()
+      .flat_map(|layer| layer.params_mut())
+      .collect()
   }
 }
