@@ -3,6 +3,7 @@ use ndarray_rand::{
   RandomExt,
   rand_distr::{Normal, num_traits::Float},
 };
+use uuid::Uuid;
 
 fn generate_normal_array(shape: &[usize]) -> ArrayD<f64> {
   // 正規分布のインスタンスを作成
@@ -32,12 +33,12 @@ pub struct AffineLayer {
 impl AffineLayer {
   pub fn new(input_dim: usize, output_dim: usize) -> Self {
     let weight = LearnableParameter {
-      id: 0,
+      id: Uuid::new_v4().as_u128() as usize,
       value: generate_normal_array(&[input_dim, output_dim]),
       grads: Array::zeros((input_dim, output_dim)).into_dyn(),
     };
     let bias = LearnableParameter {
-      id: 1,
+      id: Uuid::new_v4().as_u128() as usize,
       value: generate_normal_array(&[output_dim]),
       grads: Array::zeros(output_dim).into_dyn(),
     };

@@ -7,7 +7,7 @@ mod utils;
 mod tests {
   use crate::losses::{CrossEntropyLoss, LossFunction};
   use crate::networks::layer::{AffineLayer, Layer, ReLU, Softmax};
-  use crate::optimizers::SGD;
+  use crate::optimizers::{self, Momentum, RMSProp, SGD};
   use crate::{
     networks::block::Sequential,
     optimizers::Optimizer,
@@ -30,7 +30,10 @@ mod tests {
       Box::new(AffineLayer::new(64, 10)),
       Box::new(Softmax::new()),
     ]);
-    let mut optimizer = SGD::new(0.05);
+    let mut _optimizer_sgd = SGD::new(0.05);
+    let mut _optimizer_momentum = Momentum::new(0.05, 0.9);
+    let mut optimizer_rmsprop = RMSProp::new(0.001, 0.9);
+    let mut optimizer_adam = optimizers::Adam::new(0.001, 0.9, 0.9);
     let loss = CrossEntropyLoss::new();
     for _ in 0..10 {
       for (x_train, y_train) in create_batches(&mnist, 0, 2048) {
@@ -41,7 +44,7 @@ mod tests {
         println!("Loss: {}", loss_value);
         let grad = loss.backward(y_pred.clone().into_dyn(), y_train.clone().into_dyn());
         model.backward(grad);
-        optimizer.update(model.params_mut());
+        optimizer_adam.update(model.params_mut());
       }
     }
   }

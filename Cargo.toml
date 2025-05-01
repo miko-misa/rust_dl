@@ -8,3 +8,4 @@ ndarray = "0.16.1"
 ndarray-rand = "0.15"
 ndarray-csv = "0.5"
 csv = "1.1"
+uuid = { version = "1", features = ["v4"] }
