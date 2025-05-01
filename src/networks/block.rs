@@ -1,6 +1,8 @@
 use ndarray::ArrayD;
 
-use super::layer::{Layer, LearnableParameter};
+use crate::params::param::LearnableParameter;
+
+use super::layer::Layer;
 
 pub struct Sequential {
   layers: Vec<Box<dyn Layer>>,

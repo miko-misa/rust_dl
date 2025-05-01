@@ -5,18 +5,10 @@ use ndarray_rand::{
 };
 use uuid::Uuid;
 
-fn generate_normal_array(shape: &[usize]) -> ArrayD<f64> {
-  // 正規分布のインスタンスを作成
-  let normal = Normal::new(0.0, 1.0 / (shape[0] as f64).sqrt()).unwrap();
-  // IxDynで動的次元を指定し、配列を生成
-  Array::random(IxDyn(shape), normal)
-}
-
-pub struct LearnableParameter {
-  pub id: usize,
-  pub value: ArrayD<f64>,
-  pub grads: ArrayD<f64>,
-}
+use crate::params::{
+  initializer::{self, Initializer},
+  param::LearnableParameter,
+};
 
 pub trait Layer {
   fn forward(&mut self, input: ArrayD<f64>) -> ArrayD<f64>;
@@ -31,17 +23,13 @@ pub struct AffineLayer {
 }
 
 impl AffineLayer {
-  pub fn new(input_dim: usize, output_dim: usize) -> Self {
-    let weight = LearnableParameter {
-      id: Uuid::new_v4().as_u128() as usize,
-      value: generate_normal_array(&[input_dim, output_dim]),
-      grads: Array::zeros((input_dim, output_dim)).into_dyn(),
-    };
-    let bias = LearnableParameter {
-      id: Uuid::new_v4().as_u128() as usize,
-      value: generate_normal_array(&[output_dim]),
-      grads: Array::zeros(output_dim).into_dyn(),
-    };
+  pub fn new<O, P>(input_dim: usize, output_dim: usize, weight_init: &O, bias_init: &P) -> Self
+  where
+    O: Initializer,
+    P: Initializer,
+  {
+    let weight = LearnableParameter::new(&[input_dim, output_dim], weight_init);
+    let bias = LearnableParameter::new(&[output_dim], bias_init);
     AffineLayer {
       weight,
       bias,

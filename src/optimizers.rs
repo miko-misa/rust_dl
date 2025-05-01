@@ -1,6 +1,7 @@
-use crate::networks::layer::LearnableParameter;
 use ndarray::ArrayD;
 use std::collections::HashMap;
+
+use crate::params::param::LearnableParameter;
 
 pub trait Optimizer {
   fn update(&mut self, params: Vec<&mut LearnableParameter>);

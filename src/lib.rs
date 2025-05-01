@@ -1,6 +1,7 @@
 mod losses;
 mod networks;
 mod optimizers;
+mod params;
 mod utils;
 
 #[cfg(test)]
@@ -8,6 +9,7 @@ mod tests {
   use crate::losses::{CrossEntropyLoss, LossFunction};
   use crate::networks::layer::{AffineLayer, Layer, ReLU, Softmax};
   use crate::optimizers::{self, Momentum, RMSProp, SGD};
+  use crate::params::initializer::{HeInitializer, ZeroInitializer};
   use crate::{
     networks::block::Sequential,
     optimizers::Optimizer,
@@ -22,17 +24,19 @@ mod tests {
   #[test]
   fn it_works() {
     let mnist = load_csv_to_ndarray("data/mnist_train.csv", true).unwrap();
+    let he_init = HeInitializer;
+    let zero_init = ZeroInitializer;
     let mut model = Sequential::new(vec![
-      Box::new(AffineLayer::new(784, 128)),
+      Box::new(AffineLayer::new(784, 128, &he_init, &zero_init)),
       Box::new(ReLU::new()),
-      Box::new(AffineLayer::new(128, 64)),
+      Box::new(AffineLayer::new(128, 64, &he_init, &zero_init)),
       Box::new(ReLU::new()),
-      Box::new(AffineLayer::new(64, 10)),
+      Box::new(AffineLayer::new(64, 10, &he_init, &zero_init)),
       Box::new(Softmax::new()),
     ]);
     let mut _optimizer_sgd = SGD::new(0.05);
     let mut _optimizer_momentum = Momentum::new(0.05, 0.9);
-    let mut optimizer_rmsprop = RMSProp::new(0.001, 0.9);
+    let mut _optimizer_rmsprop = RMSProp::new(0.001, 0.9);
     let mut optimizer_adam = optimizers::Adam::new(0.001, 0.9, 0.9);
     let loss = CrossEntropyLoss::new();
     for _ in 0..10 {
