@@ -1,4 +1,4 @@
-#import "../機械学習/report_template.typ": *
+#import "report_template.typ": *
 #import "@preview/cetz:0.3.4"
 #import "@preview/cetz-plot:0.1.1": plot
 #import "@preview/fletcher:0.5.7": *
@@ -22,7 +22,7 @@
 #set page(
   margin: (
     top: 2.8cm,
-    bottom: 2.1cm,
+    bottom: 1.8cm,
     x: 1.5cm,
   )
 )
@@ -671,19 +671,21 @@ $
 $
   (partial cal(L))/(partial bold(X)) = (partial cal(L))/(partial bold(Y)) dot bold(W)^top
 $
-も成立する。$bold(X), bold(W), display((partial cal(L))/(partial bold(Y)))$は既知であるので、重みの偏微分係数を求めることができた。SGDの更新式もそのまま使える。
+も成立する。$bold(X), bold(W), display((partial cal(L))/(partial bold(Y)))$は既知であるので、重みの偏微分係数を求めることができた。
+さて、バイアスについては、以下のような依存関係がある。
 $
-  bold(W) arrow.l bold(W) - eta (partial cal(L))/(partial bold(W))\
+  b_j quad arrow.bar quad y_(i j) thick (1 <= forall i <= n) quad arrow.bar quad cal(L)\
 $
-バイアスについては、同様に計算すると
+したがって、$b_j$について偏微分すると
 $
-  (partial cal(L))/(partial bold(B)) = (partial cal(L))/(partial bold(Y))
+  (partial cal(L))/(partial b_j) &= sum_(1<=i<=n) (partial cal(L))/(partial y_(i j)) (partial y_(i j))/(partial b_j)\
+  &= sum_(1<=i<=n) (partial cal(L))/(partial y_(i j))\
 $
-であるが、バイアスは各ニューロンに1つしかないので、$bold(B)$の各行は同じ値を持つ。そのために、列方向に総和を取る。したがって、以下のように更新幅を決めることにする。
+となる。$b_j$は$y_(i j)$に依存しているので、$j$番目の列の和をとることになる。したがって、逆伝播は以下のように表せる。
 $
-  [bold(B)]_(i j) arrow.l [bold(B)]_(i j) - eta sum_(1<=k<=n) [(partial cal(L))/(partial bold(Y))]_(k j)\
+  (partial cal(L))/(partial bold(b)) = sum_(1<=i<=n) [(partial cal(L))/(partial bold(Y))]_(i)\
 $
-場合によっては、$eta$の代わりに$display(eta/n)$を用いることもある。
+ここで、$[(partial cal(L))/(partial bold(Y))]_(i)$は$(partial cal(L))/(partial bold(Y))$の$i$行目を表す。
 
 === ReLU関数の逆伝播
 ReLU関数は非常に簡単に逆伝播できる。ReLU関数は以下のように定義されていた。
@@ -794,4 +796,197 @@ $
   (partial cal(L))/(partial bold(X)) &= 1/C (bold(Y) - bold(T))
 $
 
+= ニューラルネットワークの工夫
+前章までで、ニューラルネットワークの基本的な部分を学んだ。ここからは、ニューラルネットワークをより効率的に学習させるための工夫を紹介する。
 
+== Optimizer
+Optimizerは、パラメータを更新するためのアルゴリズムである。SGDはOptimizerの一つである。ここでは、SGDにさまざまな工夫を加えたOptimizerを紹介する。この章ではあるパラメータ$bold(PP)$を更新することを考える。
+
+=== Momentum
+Momentumは、SGDの更新に過去の更新を引き継いだ慣性のようなものを加えたものである。前回までの更新を$bold(M)$に保存し、新たな更新では勾配と$bold(M)$の両方を用いる。
+$
+  bold(M) & arrow.l alpha bold(M) - eta (partial cal(L))/(partial bold(P))\
+  bold(P) & arrow.l bold(P) + bold(M)\
+
+$
+
+=== RMSProp
+RMSPropは、SGDの更新に対して学習率を調整する機能を付け加えたものである。更新分が一定だと、最小に近づくにつれ、更新幅が必要な幅より大きくなってしまう問題を解決するため、更新幅の分だけ学習率を割り引く。更新幅は指数移動平均を用いて計算し、ある程度過去の更新幅を引き継ぐ。
+$
+  bold(G) & arrow.l beta bold(G) + (1 - beta) (partial cal(L))/(partial bold(P)) circle.small (partial cal(L))/(partial bold(P))\
+  bold(P) & arrow.l bold(P) - eta/sqrt(bold(G)) (partial cal(L))/(partial bold(P)) \
+$
+
+パラメータごとに学習率を調整するために、アダマール積とアダマール除算を用いている。
+
+=== Adam
+Adamは、MomentumとRMSPropを組み合わせたものである。
+$
+  bold(M) & arrow.l beta_1 bold(M) + (1 - beta_1) (partial cal(L))/(partial bold(P))\
+  bold(G) & arrow.l beta_2 bold(G) + (1 - beta_2) (partial cal(L))/(partial bold(P)) circle.small (partial cal(L))/(partial bold(P))\
+  bold(P) & arrow.l bold(P) - eta/sqrt(bold(G)) bold(M)
+$
+
+== レイヤ
+Affine層や活性化関数層以外の、レイヤを追加することで学習を加速あるいは、精度を上げることができる。ここでは、代表的なレイヤを紹介する。\
+
+=== Batch Normalization
+==== 順伝播
+学習時はバッチを用いて複数のデータを同時に学習する。この際、バッチ内のデータに偏りが存在する場合があり、学習が進まないことがある。また、途中の層の出力が極端になってしまうことがある。これを防ぐために、バッチ内のデータについて、各特徴量を正則化する。その後、学習可能なパラメータを用いて、正則化したデータを変換する。これをBatch Normalization（以下、BN）とよぶ。入力が$bold(X) in MM^(B times C)$の行列である場合、正則化を行うのは列ごとであることに注意されたい。
+
+ここでは$bold(X)$の$i$行目ベクトルを$bold(x)^((i))$とする。ここでは、要素$x^((i))_j$がどのように正則化されるかを考える。その際、$j$列目のことのみを考えればよい。$j$行目の平均を$mu_j$、分散を$sigma_j$とし、中間出力を$bold(z)^((i))$、最終出力を$bold(y)^((i))$とする。すると、BNは以下のように行われる。
+$
+  mu_j &= 1/B sum_(1<=k<=B) x^((k))_j\
+  sigma_j &= 1/B sum_(1<=k<=B) (x^((k))_j - mu_j)^2\
+  z^((i))_j &= (x^((i))_j - mu_j) / sigma_j\
+  y^((i))_j &= gamma_j z^((i))_j + beta_j\
+$
+
+ここで、$gamma_j$と$beta_j$は学習可能なパラメータで、行ごとに別の値が適応される。正則化後のデータを適切にスケールするためのものである。$mu_j$、$sigma_j$は推論時に列ごとに計算される。つまり、実際には$bold(gamma), bold(beta), bold(mu), bold(sigma)$はベクトルである。
+
+==== 逆伝播
+次に、学習可能なパラメータである$bold(gamma)$と$bold(beta)$と、$bold(X)$の逆伝播を考える。ここでも、$(partial cal(L))/(partial bold(Y))$は既知とする。まずは、$bold(Y)$から$bold(Z)$までの逆伝播を考える。まず、$gamma_j, beta_j, z^((i))_j$の損失関数$cal(L)$に対する依存関係を整理しよう。
+$
+  gamma_j quad arrow.bar quad y^((k))_j thick (1 <= forall k <= B) quad arrow.bar quad cal(L)\
+  beta_j quad arrow.bar quad y^((k))_j thick (1 <= forall k <= B) quad arrow.bar quad cal(L)\
+  z^((i))_j quad arrow.bar quad y^((i))_j quad arrow.bar quad cal(L)\
+$
+つまり、
+$
+  (partial cal(L))/(partial z^((i))_j) &= (partial cal(L))/(partial y^((i))_j) (partial y^((i))_j)/(partial z^((i))_j) =  (partial cal(L))/(partial y^((i))_j) gamma_j\
+  (partial cal(L))/(partial gamma_j) &= sum_(1<=k<=B) (partial cal(L))/(partial y^((k))_j) (partial y^((k))_j)/(partial gamma_j)\
+  &= sum_(1<=k<=B) (partial cal(L))/(partial y^((k))_j) z^((k))_j\
+  (partial cal(L))/(partial beta_j) &= sum_(1<=k<=B) (partial cal(L))/(partial y^((k))_j) (partial y^((k))_j)/(partial beta_j)\
+  &= sum_(1<=k<=B) (partial cal(L))/(partial y^((k))_j)\
+$
+である。つまり、ベクトル表現を用いると
+$
+  (partial cal(L))/(partial bold(gamma)) &= sum_(1<=k<=B) (partial cal(L))/(partial bold(y)^((k))) circle.small bold(z)^((k))\
+  (partial cal(L))/(partial bold(beta)) &= sum_(1<=k<=B) (partial cal(L))/(partial bold(y)^((k)))\
+$
+となる。次に、$bold(Z)$から$bold(X)$までの逆伝播を考える。注意すべき点は$x^((i))_j$が$mu$や$sigma$に寄与しており、それがすべての$z^((k))_j (1 <= forall k <= B)$に寄与していることである。計算しやすさのため、$u^((i))_j colon=x^((i))_j - mu_j$を定義する。すると、$sigma_j$は
+$
+  sigma_j &= 1/B sum_(1<=k<=B) (u^((k))_j)^2\
+$
+と表される。$u^((i))_j$を用いて関係をまとめると以下のようになる。ただしこの図で$k$は$1<=k<=B and k eq.not i$を満たすすべての$k$である。
+
+#align(center)[
+  #set text(size: 12pt, weight: 500)
+  #diagram(
+  node-stroke: none,
+  edge-corner-radius: none,
+  node-inset: 5pt,
+  spacing: (20pt, 25pt),
+  node-shape: "circle",
+
+  // Nodes
+  node((-1,0), [$x^((i))_j$], name: <x>, width: 1.0cm),
+  node((0,1), [$mu_j$], name: <mu>, width: 1.0cm),
+  node((1,0), [$u^((i))_j$], name: <ui>, width: 1.0cm),
+  node((1,1), [$u^((k))_j$], name: <uk>, width: 1.0cm),
+  node((2,0.5), [$sigma^2_j$], name: <sig2>, width: 1.0cm),
+  node((3,0.5), [$sigma_j$], name: <sig>, width: 1.0cm),
+  node((4,0), [$z^((i))_j$], name: <zi>, width: 1.0cm),
+  node((4,1), [$z^((k))_j$], name: <zk>, width: 1.0cm),
+  node((5,0.5), [$cal(L)$], name: <l>, width: 1.0cm),
+
+  edge(<x>, <mu>, "|->"),
+  edge(<x>, <ui>, "|->"),
+  edge(<mu>, <ui>, "|->"),
+  edge(<mu>, <uk>, "|->"),
+  edge(<ui>, <sig2>, "|->"),
+  edge(<uk>, <sig2>, "|->"),
+  edge(<ui>, <zi>, "|->"),
+  edge(<uk>, <zk>, "|->"),
+  edge(<sig2>, <sig>, "|->"),
+  edge(<sig>, <zi>, "|->"),
+  edge(<sig>, <zk>, "|->"),
+  edge(<zi>, <l>, "|->"),
+  edge(<zk>, <l>, "|->"),
+  )
+]
+$u^((i))_j$に対しては、$x^((i))_j$が$mu_j$を介してだけではなく直接作用するので、$u^((i))_j$と$z^((i))_j$を他の$u^((k))_j$や$z^((k))_j$と区別する必要がある。逆に、$u^((k))_j$までは区別する必要はないのでこれからは$k$は$i$も含めた任意の添字として扱う。まずは、$sigma_j$について考える。
+$
+  z^((k))_j = (u^((k))_j) / sigma_j quad
+  &=> quad (partial z^((k))_j)/(partial sigma_j) = - (u^((k))_j) / sigma_j^2\
+  (partial sigma_j)/(partial sigma^2_j) &= 1/(2 sigma_j)\
+  therefore (partial cal(L))/(partial sigma^2_j) &= sum_(1<=k<=B) (partial cal(L))/(partial z^((k))_j) (partial z^((k))_j)/(partial sigma_j) (partial sigma_j)/(partial sigma^2_j)\
+  &= - 1/(2 sigma^3_j) sum_(1<=k<=B) (partial cal(L))/(partial z^((k))_j) u^((k))_j\
+$
+次に、$u^((k))_j$について考えると、
+$
+  sigma_j = 1/B sum_(1<=k<=B) (u^((k))_j)^2 quad => quad (partial sigma^2_j)/(partial u^((k))_j) &= 2/B u^((k))_j\
+$
+である。また、$z^((k))_j = u^((k))_j / sigma_j$から、$u^((i))_j$の$sigma_j$に対する依存を一旦無視すると
+$
+  lr((partial z^((k))_j)/(partial u^((k))_j)|)_text("direct")  &= 1/sigma_j\
+$
+であるので、
+$
+  (partial z^((k))_j)/(partial u^((k))_j) &= lr((partial z^((k))_j)/(partial u^((k))_j)|)_text("direct") + (partial z^((k))_j)/(partial sigma^2_j) (partial sigma^2_j)/(partial u^((k))_j)\
+  &= 1/sigma_j + 2/B u^((k))_j (partial z^((k))_j)/(partial sigma^2_j)\
+  therefore (partial cal(L))/(partial u^((k))_j) &= (partial cal(L))/(partial z^((k))_j) 1/sigma_j + 2/B u^((k))_j (partial cal(L))/(partial sigma^2_j)
+$
+となる。最後に$u^((k))_j$に対する$x^((i))_j$への逆伝播を考える。しかし、$mu_j$がすべての$u^((k))_j$に寄与していることを考慮する必要がある。
+$
+  u^((k))_j = x^((k))_j - mu_j quad &=> quad (partial u^((k))_j)/(partial mu_j) = -1\
+  therefore (partial cal(L))/(partial mu_j) &= sum_(1<=k<=B) (partial cal(L))/(partial u^((k))_j) (partial u^((k))_j)/(partial mu_j)\
+  &= - sum_(1<=k<=B) (partial cal(L))/(partial u^((k))_j)\
+  &= - sum_(1<=k<=B) [(partial cal(L))/(partial z^((k))_j) 1/sigma_j + 2/B u^((k))_j (partial cal(L))/(partial sigma^2_j)]\
+  &= - 1/sigma_j sum_(1<=k<=B) (partial cal(L))/(partial z^((k))_j) - 2/B (partial cal(L))/(partial sigma^2_j) sum_(1<=k<=B) u^((k))_j \
+$
+ここで、$sum_(1<=k<=B) u^((k))_j$について考えてみる。
+$
+  sum_(1<=k<=B) u^((k))_j &= sum_(1<=k<=B) (x^((k))_j - mu_j)\
+  &= sum_(1<=k<=B) x^((k))_j - B mu_j\
+  &= sum_(1<=k<=B) x^((k))_j - sum_(1<=k<=B) x^((k))_j\
+  &= 0\
+$
+したがって、
+$
+  (partial cal(L))/(partial mu_j) &= - 1/sigma_j sum_(1<=k<=B) (partial cal(L))/(partial z^((k))_j)\
+$
+そして、$x^((i))_j$は直接$u^((i))_j$に寄与している他、$mu_j$を通して$u^((k))_j$に寄与している。つまり、
+$
+  mu_j = 1/B sum_(1<=k<=B) x^((k))_j quad &=> quad (partial mu_j)/(partial x^((i))_j) = 1/B\
+  therefore (partial cal(L))/(partial x^((i))_j) &= (partial cal(L))/(partial u^((i))_j) lr((partial u^((i))_j)/(partial x^((i))_j)|)_text("direct") + (partial cal(L))/(partial mu_j) (partial mu_j)/(partial x^((i))_j)\
+  &= (partial cal(L))/(partial u^((i))_j) + 1/B (partial cal(L))/(partial mu_j)\
+  &= (partial cal(L))/(partial u^((i))_j) - 1/(B sigma_j) sum_(1<=k<=B) (partial cal(L))/(partial z^((k))_j)\
+$
+となる。第1項について詳しく考える。$z^((k))_j = u^((k))_j / sigma_j$を念頭に考えると、
+$
+  (partial cal(L))/(partial u^((i))_j) &= (partial cal(L))/(partial z^((i))_j) 1/sigma_j + 2/B u^((i))_j (partial cal(L))/(partial sigma^2_j)\
+  &= (partial cal(L))/(partial z^((i))_j) 1/sigma_j + 2/B u^((i))_j (-1/(2 sigma^3_j) sum_(1<=k<=B) (partial cal(L))/(partial z^((k))_j) u^((k))_j)\
+  &= (partial cal(L))/(partial z^((i))_j) 1/sigma_j - 1/sigma_j 1/B u^((i))_j/sigma_j sum_(1<=k<=B) (partial cal(L))/(partial z^((k))_j) u^((k))_j/sigma_j\
+  &= (partial cal(L))/(partial z^((i))_j) 1/sigma_j - 1/sigma_j z^((i))_j/B sum_(1<=k<=B) (partial cal(L))/(partial z^((k))_j) z^((k))_j\
+$
+つまり、以上をまとめると
+$
+  (partial cal(L))/(partial x^((i))_j) &= (partial cal(L))/(partial z^((i))_j) 1/sigma_j - 1/sigma_j z^((i))_j/B sum_(1<=k<=B) (partial cal(L))/(partial z^((k))_j) z^((k))_j\
+  &= (partial cal(L))/(partial z^((i))_j) 1/sigma_j - 1/sigma_j z^((i))_j/B sum_(1<=k<=B) (partial cal(L))/(partial z^((k))_j) z^((k))_j - 1/(B sigma_j) sum_(1<=k<=B) (partial cal(L))/(partial z^((k))_j)\
+  &= 1/sigma_j [
+    (partial cal(L))/(partial z^((i))_j) - z^((i))_j/B sum_(1<=k<=B) (partial cal(L))/(partial z^((k))_j) z^((k))_j - 1/B sum_(1<=k<=B) (partial cal(L))/(partial z^((k))_j)
+  ]\
+  &= gamma_j/sigma_j [
+    (partial cal(L))/(partial y^((i))_j) - z^((i))_j/B sum_(1<=k<=B) (partial cal(L))/(partial y^((k))_j) z^((k))_j - 1/B sum_(1<=k<=B) (partial cal(L))/(partial y^((k))_j)
+  ]\
+$
+となる。最後の等号は、$(partial cal(L))/(partial z^((i))_j) = gamma_j (partial cal(L))/(partial y^((i))_j)$を用いている。さて、$gamma_j$や$beta_j$の勾配を思い出すと、
+$
+  (partial cal(L))/(partial x^((i))_j) &= gamma_j/sigma_j [
+    (partial cal(L))/(partial y^((i))_j) - z^((i))_j/B (partial cal(L))/(partial gamma_j) - 1/B (partial cal(L))/(partial beta_j)
+  ]\
+$
+となる。この式はすべての$j$列に対して成立するのでベクトル表現を用いれば以下のように整理できる。
+$
+  (partial cal(L))/(partial bold(x)^((i))) = bold(gamma)/bold(sigma) circle.small [
+    (partial cal(L))/(partial bold(y)^((i))) - 1/B { bold(z)^((i)) circle.small (partial cal(L))/(partial bold(gamma)) + (partial cal(L))/(partial bold(beta))}
+  ]\
+$
+
+さらに成分がすべて$1$で大きさ$B$の列ベクトル$bold(1)_B$を用いて行列表現に拡張すると以下のようになる。
+$
+  (partial cal(L))/(partial bold(X)) = (bold(1)_B dot bold(gamma)/bold(sigma)) circle.small [
+    (partial cal(L))/(partial bold(Y)) - 1/B { bold(Z) circle.small (bold(1)_B dot (partial cal(L))/(partial bold(gamma))) + bold(1)_B dot (partial cal(L))/(partial bold(beta))}
+  ]\
+$
