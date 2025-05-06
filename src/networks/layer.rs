@@ -153,3 +153,82 @@ impl Layer for Softmax {
     vec![]
   }
 }
+
+pub struct BatchNorm {
+  weight: LearnableParameter,
+  bias: LearnableParameter,
+  mean: Array<f64, Ix1>,
+  var: Array<f64, Ix1>,
+  z_cache: Option<Array<f64, Ix2>>,
+}
+
+impl BatchNorm {
+  pub fn new<O, P>(input_dim: usize, weight_init: &O, bias_init: &P) -> Self
+  where
+    O: Initializer,
+    P: Initializer,
+  {
+    let weight = LearnableParameter::new(&[input_dim], weight_init);
+    let bias = LearnableParameter::new(&[input_dim], bias_init);
+    let mean = Array::zeros(input_dim);
+    let var = Array::zeros(input_dim);
+    BatchNorm {
+      weight,
+      bias,
+      mean,
+      var,
+      z_cache: None,
+    }
+  }
+}
+
+impl Layer for BatchNorm {
+  fn forward(&mut self, input: ArrayD<f64>) -> ArrayD<f64> {
+    let x = input.view().into_dimensionality::<Ix2>().unwrap();
+    let mean = x.mean_axis(Axis(0)).unwrap();
+    let var = x.var_axis(Axis(0), 0.0);
+    let std = var.mapv(|x| x.max(1e-15).sqrt());
+    let z = (x.to_owned() - mean.broadcast((x.shape()[0], mean.shape()[0])).unwrap()) / &std;
+    let y = &z
+      * self
+        .weight
+        .value
+        .view()
+        .into_dimensionality::<Ix1>()
+        .unwrap()
+        .to_owned()
+      + self.bias.value.view().into_dimensionality::<Ix1>().unwrap();
+    self.z_cache = Some(z);
+    self.mean = mean;
+    self.var = var;
+    y.into_dyn()
+  }
+  fn backward(&mut self, grad: ArrayD<f64>) -> ArrayD<f64> {
+    let dy = grad.view().into_dimensionality::<Ix2>().unwrap();
+    let z = self.z_cache.as_ref().expect("Z cache is not set");
+    let dw = Array2::from_shape_vec(
+      (dy.shape()[0], z.shape()[1]),
+      dy.axis_iter(Axis(0))
+        .zip(z.axis_iter(Axis(0)))
+        .flat_map(|(dy, z)| &dy * &z)
+        .collect(),
+    )
+    .unwrap()
+    .sum_axis(Axis(0));
+    self.weight.grads = dw.clone().into_dyn();
+    let db = dy.sum_axis(Axis(0));
+    self.bias.grads = db.clone().into_dyn();
+    let b = dy.shape()[0] as f64;
+    let shape = dy.raw_dim();
+    let gamma_over_sigma = self.weight.value.clone() / self.var.mapv(|x| x.max(1e-15).sqrt());
+    let coeff = gamma_over_sigma.broadcast(shape).unwrap();
+    let dgamma_b = dw.broadcast(shape).unwrap();
+    let dbeta_b = db.broadcast(shape).unwrap();
+    let z_mul_dgamma = z * &dgamma_b;
+    let subtract_term = (&z_mul_dgamma + &dbeta_b) / b;
+    (&coeff * &(dy.to_owned() - subtract_term.to_owned())).into_dyn()
+  }
+  fn params_mut(&mut self) -> Vec<&mut LearnableParameter> {
+    vec![&mut self.weight, &mut self.bias]
+  }
+}
