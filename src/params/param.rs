@@ -1,7 +1,6 @@
-use ndarray::{Array, ArrayD, IxDyn};
-use ndarray_rand::{RandomExt, rand_distr::Normal};
+use ndarray::ArrayD;
 
-use super::initializer::{self, Initializer};
+use super::initializer::Initializer;
 
 pub struct LearnableParameter {
   pub id: usize,

@@ -18,7 +18,7 @@ mod tests {
       batch::{create_batches, one_hot_encode},
     },
   };
-  use ndarray::{ArrayD, Axis, IxDyn};
+  use ndarray::{ArrayD, IxDyn};
   use ndarray_rand::rand::{self, thread_rng};
   use rand::seq::SliceRandom;
   use utils::load_csv::load_csv_to_ndarray;

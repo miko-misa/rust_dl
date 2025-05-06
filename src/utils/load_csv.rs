@@ -1,4 +1,4 @@
-use csv::{Error, ReaderBuilder};
+use csv::ReaderBuilder;
 use ndarray::Array2;
 use ndarray_csv::Array2Reader;
 use std::fs::File;

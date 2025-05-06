@@ -1,4 +1,4 @@
-use ndarray::{Array, ArrayD, IxDyn};
+use ndarray::{Array, IxDyn};
 use ndarray_rand::{RandomExt, rand_distr::Normal};
 use uuid::Uuid;
 

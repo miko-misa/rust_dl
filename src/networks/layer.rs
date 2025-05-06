@@ -1,14 +1,6 @@
-use ndarray::{Array, Array2, ArrayD, Axis, Ix1, Ix2, IxDyn, Zip, arr1};
-use ndarray_rand::{
-  RandomExt,
-  rand_distr::{Normal, num_traits::Float},
-};
-use uuid::Uuid;
+use ndarray::{Array, Array2, ArrayD, Axis, Ix1, Ix2};
 
-use crate::params::{
-  initializer::{self, Initializer},
-  param::LearnableParameter,
-};
+use crate::params::{initializer::Initializer, param::LearnableParameter};
 
 pub trait Layer {
   fn forward(&mut self, input: ArrayD<f64>) -> ArrayD<f64>;
