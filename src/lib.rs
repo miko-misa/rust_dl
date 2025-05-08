@@ -1,4 +1,5 @@
 mod losses;
+mod models;
 mod networks;
 mod optimizers;
 mod params;
@@ -7,6 +8,7 @@ mod utils;
 #[cfg(test)]
 mod tests {
   use crate::losses::{CrossEntropyLoss, LossFunction};
+  use crate::models::BaseModel;
   use crate::networks::layer::{AffineLayer, BatchNorm, Layer, ReLU, Softmax};
   use crate::optimizers::{Adam, Momentum, RMSProp, SGD};
   use crate::params::initializer::{HeInitializer, ZeroInitializer};
@@ -19,17 +21,15 @@ mod tests {
     },
   };
   use ndarray::{ArrayD, IxDyn};
-  use ndarray_rand::rand::{self, thread_rng};
-  use rand::seq::SliceRandom;
   use utils::load_csv::load_csv_to_ndarray;
 
   #[test]
-  fn it_works() {
+  fn it_works() -> Result<(), Box<dyn std::error::Error>> {
     let mnist = load_csv_to_ndarray("data/mnist_train.csv", true).unwrap();
     let mnist_val = load_csv_to_ndarray("data/mnist_test.csv", true).unwrap();
     let he_init = HeInitializer;
     let zero_init = ZeroInitializer;
-    let mut model = Sequential::new(vec![
+    let model_layer = Sequential::new(vec![
       Box::new(AffineLayer::new(784, 128, &he_init, &zero_init)),
       Box::new(BatchNorm::new(128, &he_init, &zero_init)),
       Box::new(ReLU::new()),
@@ -40,39 +40,43 @@ mod tests {
       Box::new(BatchNorm::new(10, &he_init, &zero_init)),
       Box::new(Softmax::new()),
     ]);
-    let mut _optimizer_sgd = SGD::new(0.05);
-    let mut _optimizer_momentum = Momentum::new(0.05, 0.9);
-    let mut _optimizer_rmsprop = RMSProp::new(0.005, 0.9);
-    let mut optimizer_adam = Adam::new(0.005, 0.9, 0.999);
-    let loss = CrossEntropyLoss::new();
-    let mut validate = create_batches(&mnist_val, 0, 4096);
-    let mut rng = thread_rng();
-    for _ in 0..10 {
-      for (x_train, y_train) in create_batches(&mnist, 0, 2048) {
-        let y_train = one_hot_encode(&y_train, 10);
-        let x_train = x_train / 255.0;
-        let y_pred = model.forward(x_train.clone().into_dyn());
-        let loss_value = loss.forward(y_pred.clone(), y_train.clone().into_dyn());
-        println!("Loss: {}", loss_value);
-        let grad = loss.backward(y_pred.clone().into_dyn(), y_train.clone().into_dyn());
-        model.backward(grad);
-        optimizer_adam.update(model.params_mut());
-
-        if let Some(choice) = validate.choose_mut(&mut rng) {
-          let (x_val, y_val) = choice;
-          let y_val = one_hot_encode(&y_val, 10);
-          let x_val = &*x_val / 255.0;
-          let y_pred = model.forward(x_val.clone().into_dyn());
-          let loss_value = loss.forward(y_pred.clone(), y_val.clone().into_dyn());
-          println!("Validation Loss: {}", loss_value);
-        } else {
-          println!("バリデーションデータが空です。");
-        }
-      }
+    let mut model = BaseModel::new(
+      Box::new(model_layer),
+      Box::new(CrossEntropyLoss::new()),
+      Box::new(Adam::new(0.005, 0.9, 0.999)),
+    );
+    let mut train_data = create_batches(&mnist, 0, 2048);
+    for (x_train, y_train) in train_data.iter_mut() {
+      *y_train = one_hot_encode(&y_train, 10);
+      *x_train = &*x_train / 255.0;
     }
+    let mut val_data = create_batches(&mnist_val, 0, 4096);
+    for (x_test, y_test) in val_data.iter_mut() {
+      *y_test = one_hot_encode(&y_test, 10);
+      *x_test = &*x_test / 255.0;
+    }
+    let train_result = model.train_step(
+      10,
+      &train_data
+        .into_iter()
+        .map(|(x, y)| (x.into_dyn(), y.into_dyn()))
+        .collect(),
+      &val_data
+        .into_iter()
+        .map(|(x, y)| (x.into_dyn(), y.into_dyn()))
+        .collect(),
+    );
+
+    let mut wtr = Writer::from_path("data/result/output.csv")?;
+    wtr.write_record(&["train loss", "val loss"])?;
+    for (x, y) in train_result {
+      wtr.write_record(&[x.to_string(), y.to_string()])?;
+    }
+    wtr.flush()?;
+    Ok(())
   }
 
-  use csv::Writer;
+  use csv::{Error, Writer};
   use std::collections::HashMap;
   use std::io::{self, Write};
 
