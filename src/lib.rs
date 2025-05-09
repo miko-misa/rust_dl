@@ -30,20 +30,20 @@ mod tests {
     let he_init = HeInitializer;
     let zero_init = ZeroInitializer;
     let model_layer = Sequential::new(vec![
-      Box::new(AffineLayer::new(784, 128, &he_init, &zero_init)),
+      Box::new(AffineLayer::new(784, 128, &he_init, &zero_init, None)),
       Box::new(BatchNorm::new(128, &he_init, &zero_init)),
       Box::new(ReLU::new()),
-      Box::new(AffineLayer::new(128, 64, &he_init, &zero_init)),
+      Box::new(AffineLayer::new(128, 64, &he_init, &zero_init, None)),
       Box::new(BatchNorm::new(64, &he_init, &zero_init)),
       Box::new(ReLU::new()),
-      Box::new(AffineLayer::new(64, 10, &he_init, &zero_init)),
+      Box::new(AffineLayer::new(64, 10, &he_init, &zero_init, None)),
       Box::new(BatchNorm::new(10, &he_init, &zero_init)),
       Box::new(Softmax::new()),
     ]);
     let mut model = BaseModel::new(
       Box::new(model_layer),
       Box::new(CrossEntropyLoss::new()),
-      Box::new(Adam::new(0.005, 0.9, 0.999)),
+      Box::new(Adam::new(0.01, 0.9, 0.999)),
     );
     let mut train_data = create_batches(&mnist, 0, 2048);
     for (x_train, y_train) in train_data.iter_mut() {
@@ -100,11 +100,11 @@ mod tests {
       let he_init = HeInitializer;
       let zero_init = ZeroInitializer;
       let mut model = Sequential::new(vec![
-        Box::new(AffineLayer::new(784, 128, &he_init, &zero_init)),
+        Box::new(AffineLayer::new(784, 128, &he_init, &zero_init, None)),
         Box::new(ReLU::new()),
-        Box::new(AffineLayer::new(128, 64, &he_init, &zero_init)),
+        Box::new(AffineLayer::new(128, 64, &he_init, &zero_init, None)),
         Box::new(ReLU::new()),
-        Box::new(AffineLayer::new(64, 10, &he_init, &zero_init)),
+        Box::new(AffineLayer::new(64, 10, &he_init, &zero_init, None)),
         Box::new(Softmax::new()),
       ]);
       let loss_fn = CrossEntropyLoss::new();

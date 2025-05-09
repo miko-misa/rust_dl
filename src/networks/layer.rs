@@ -1,6 +1,9 @@
 use ndarray::{Array, Array2, ArrayD, Axis, Ix1, Ix2};
+use ndarray_rand::{RandomExt, rand};
 
-use crate::params::{initializer::Initializer, param::LearnableParameter};
+use crate::params::{
+  initializer::Initializer, param::LearnableParameter, regularizer::Regularizer,
+};
 
 pub trait Layer {
   fn forward(&mut self, input: ArrayD<f64>) -> ArrayD<f64>;
@@ -12,10 +15,17 @@ pub struct AffineLayer {
   weight: LearnableParameter,
   bias: LearnableParameter,
   input_cache: Option<Array<f64, Ix2>>,
+  weight_reg: Option<Box<dyn Regularizer>>,
 }
 
 impl AffineLayer {
-  pub fn new<O, P>(input_dim: usize, output_dim: usize, weight_init: &O, bias_init: &P) -> Self
+  pub fn new<O, P>(
+    input_dim: usize,
+    output_dim: usize,
+    weight_init: &O,
+    bias_init: &P,
+    weight_reg: Option<Box<dyn Regularizer>>,
+  ) -> Self
   where
     O: Initializer,
     P: Initializer,
@@ -26,6 +36,7 @@ impl AffineLayer {
       weight,
       bias,
       input_cache: None,
+      weight_reg,
     }
   }
 }
@@ -53,7 +64,13 @@ impl Layer for AffineLayer {
       .into_dimensionality::<Ix2>()
       .unwrap();
     let dy = grad.view().into_dimensionality::<Ix2>().unwrap();
-    self.weight.grads = x.t().dot(&dy).into_dyn();
+    self.weight.grads = match &self.weight_reg {
+      Some(reg) => reg.apply(
+        x.t().dot(&dy).into_dyn(),
+        self.weight.value.clone().into_dyn(),
+      ),
+      _ => x.t().dot(&dy).into_dyn(),
+    };
     self.bias.grads = dy.sum_axis(Axis(0)).into_dyn();
     dy.dot(&w.t()).into_dyn()
   }
@@ -222,5 +239,35 @@ impl Layer for BatchNorm {
   }
   fn params_mut(&mut self) -> Vec<&mut LearnableParameter> {
     vec![&mut self.weight, &mut self.bias]
+  }
+}
+
+struct Dropout {
+  p: f64,
+  mask: Option<Array<f64, Ix2>>,
+}
+impl Dropout {
+  pub fn new(p: f64) -> Self {
+    Dropout { p, mask: None }
+  }
+}
+impl Layer for Dropout {
+  fn forward(&mut self, input: ArrayD<f64>) -> ArrayD<f64> {
+    let x = input.view().into_dimensionality::<Ix2>().unwrap();
+    let mask = Array::random(x.raw_dim(), rand::distributions::Uniform::new(0.0, 1.0));
+    self.mask = Some(mask.clone());
+    let output = &x * mask.mapv(|x| if x < self.p { 0.0 } else { 1.0 });
+    let output = output / (1.0 - self.p);
+    output.into_dyn()
+  }
+
+  fn backward(&mut self, grad: ArrayD<f64>) -> ArrayD<f64> {
+    let dy = grad.view().into_dimensionality::<Ix2>().unwrap();
+    let mask = self.mask.as_ref().expect("Mask is not set");
+    (dy.to_owned() * mask / (1.0 - self.p)).into_dyn()
+  }
+
+  fn params_mut(&mut self) -> Vec<&mut LearnableParameter> {
+    vec![]
   }
 }
