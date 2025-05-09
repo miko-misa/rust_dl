@@ -458,11 +458,12 @@ $
   )^top quad &in &MM^(batch times m)\
   bold(B) colon&= mat(
     bold(b), bold(b), dots, bold(b);
-  )^top quad &in &MM^(batch times m)
+  )^top quad &in &MM^(batch times m)\
+  &= bold(1)_batch dot bold(b)
 $
-これは先ほどと同様に行列の積で計算できる。
+$bold(1)_n$は成分がすべて$1$で$n$次元列ベクトルである。このベクトルと、任意の行ベクトル$bold(b)$のドット積は、$bold(b)$の成分を$n$行分だけコピーした行列になる。これをベクトルのブロードキャストとよぶ。さて、これは先ほどと同様に行列の積で計算できる。
 $
-  bold(Y) = bold(X) dot bold(W) + bold(b)
+  bold(Y) = bold(X) dot bold(W) + bold(B)
 $
 これは以下のように正当化される。
 $
@@ -471,7 +472,9 @@ $
   )^top dot bold(W) + bold(B)\
   &= mat(
     bold(x)_1 dot bold(W), bold(x)_2 dot bold(W), dots, bold(x)_batch dot bold(W);
-  )^top + bold(B)\
+  )^top + mat(
+    bold(b), bold(b), dots, bold(b);
+  )^top\
   &= mat(
     bold(x)_1 dot bold(W) + bold(b),thick bold(x)_2 dot bold(W) + bold(b),thick dots,thick bold(x)_batch dot bold(W) + bold(b);
   )^top\
@@ -498,13 +501,13 @@ $
 = ニューラルネットワーク
 多層パーセプトロンを実装するだけでは、意図した出力を得ることはできない。適正なパラメータを与えなければならない。しかし、人間が正確なパラメータを与えることはおおよその場合、不可能である。このパラメータを自動的に調整する方法が必要である。深層学習とはつまるところ、パラメータを自動的に調整することである。\
 
-多層パーセプトロンに与えるデータを$bold(x)^((text("train")))$、それを与えた場合に出力されるべきデータを$bold(y)^((text("train")))$、実際に出力されたデータを$bold(y)^((text("pred")))$とする。$bold(y)^((text("train")))$と$bold(y)^((text("pred")))$は大きさ$C$のベクトルとする。\
+多層パーセプトロンに与えるデータを$bold(x)$、それを与えた場合に出力されるべきデータを$bold(t)$、実際に出力されたデータを$bold(y)$とする。$bold(t)$と$bold(y)$は大きさ$C$のベクトルとする。\
 
 == 損失関数
-損失関数$cal(L)$は、実際に出力されるデータ$bold(y)^((text("train")))$と与えられたデータ$bold(y)^((text("pred")))$の差を表す関数である。これは、パラメータを調整するための指標となる。多層パーセプトロンは数学的には$bold(x)^((text("train")))$だけでなく、用いるパラメータすべてを引数にとる多変数関数とみなせる。なので、その出力を引数に持つ、損失関数もそれらを引数に持つ多変数関数とみなせる。ここで、$bold(y)^((text("train")))$は決められた定数とみなす。
+損失関数$cal(L)$は、実際に出力されるデータ$bold(t)$と与えられたデータ$bold(y)$の差を表す関数である。これは、パラメータを調整するための指標となる。多層パーセプトロンは数学的には$bold(x)$だけでなく、用いるパラメータ$bold(p)$すべてを引数にとる多変数関数とみなせる。なので、その出力を引数に持つ、損失関数もそれらを引数に持つ多変数関数とみなせる。ここで、$bold(t)$は決められた定数とみなす。
 $
 
-  cal(L) :& RR^(abs(bold(x)^((text("train"))))) times RR^(text("parameters")) -> RR\
+  cal(L) :& RR^(abs(bold(x))) times RR^(abs(bold(p))) -> RR\
 $
 
 いくつかの損失関数があるが、ここでは代表的なものを紹介する。\
@@ -512,14 +515,14 @@ $
 === 平均二乗誤差
 平均二乗誤差は、$bold(y)_text("pred")$と$bold(y)_text("train")$の個々の差を二乗して足し合せて平均をとったものである。これは、出力の値が連続的な場合に用いられる。\
 $
-  cal(L)_text("MSE") = 1/C abs(abs(bold(y)^((text("pred"))) - bold(y)^((text("train")))))^2
+  cal(L)_text("MSE") = 1/C abs(abs(bold(y) - bold(t)))^2
 $
 
 === クロスエントロピー誤差
-クロスエントロピー誤差は、$bold(y)_text("pred")$と$bold(y)_text("train")$を確率分布とみなして、その確率分布の誤差を表すものである。分類問題において使われることが多い。Softmax関数と組み合わせて用いることが多い。\
+クロスエントロピー誤差は、$bold(y)$と$bold(t)$を確率分布とみなして、その確率分布の誤差を表すものである。分類問題において使われることが多い。Softmax関数と組み合わせて用いることが多い。\
 
 $
-  cal(L)_text("CrossEntropy") = -sum_(1<=j<=C) y_i^((text("train"))) log(y_i^((text("pred"))))
+  cal(L)_text("CrossEntropy") = -sum_(1<=j<=C) t_i log(y_i)
 $
 
 #colbreak()
@@ -586,8 +589,57 @@ $
 $
 すべてのパラメータに対して、$delta$を用いて偏微分を近似的に求めることができればいいが、パラメータの数は膨大であるため、計算量が膨大になってしまう。また、より精度のいい5点公式や7点公式などもある。
 
+=== 逆伝播法における連鎖律
+改めて、今の目的は$cal(L)$のあるパラメータ$p$に関する偏微分を求めることである。以下のような計算を考えてみる。
+
+#align(center)[
+  #set text(size: 12pt, weight: 500)
+  #diagram(
+  node-stroke: none,
+  edge-corner-radius: none,
+  node-inset: 5pt,
+  spacing: (10pt, 15pt),
+  node-shape: "circle",
+
+  // Nodes
+  node((-1,0), [$x^((1))$], name: <x1>, width: 1.0cm),
+  node((-0.5,-1), [$w^((1))$], name: <w1>, width: 1.0cm),
+  node((2,0), [$y^((1))$], name: <y1>, width: 1.0cm),
+  node((3,0), [$x^((2))$], name: <x2>, width: 1.0cm),
+  node((3.5,-1), [$w^((2))$], name: <w2>, width: 1.0cm),
+  node((6,0), [$y^((2))$], name: <y2>, width: 1.0cm),
+  node((6.5,-1), [$t$], name: <t>, width: 1.0cm),
+  node((9,0), [$cal(L)$], name: <l>, width: 1.0cm),
+
+  edge(<x1>, <y1>, "|->"),
+  edge(<w1>, <y1>, "|->"),
+  edge(<y1>, <x2>, "="),
+  edge(<x2>, <y2>, "|->"),
+  edge(<w2>, <y2>, "|->"),
+  edge(<y2>, <l>, "|->"),
+  edge(<t>, <l>, "|->"),
+  )
+]
+
+$w^((1))$および$w^((2))$は学習可能なパラメータで、$y^((1))$および$y^((2))$は$w^((1)), x^((1))$および$w^((2)), x^((2))$で何かしらの計算が行われる。$y^((1))$は$x^((2))$と同じである。$cal(L)$は$y^((2))$と$t$を用いて計算される。
+
+たとえば、$w^((2))$による偏微分を求めることを考えてみよう。$w^((2))$は$y^((2))$に影響を与えており（これを寄与しているという）、$y^((2))$は$cal(L)$に寄与している。したがって、$w^((2))$の偏微分は連鎖律をもって以下のように表される。
+$
+  (partial cal(L))/(partial w^((2))) = (partial cal(L))/(partial y^((2))) (partial y^((2)))/(partial w^((2)))
+$
+ここで、$cal(L)$は$y^((2))$と$t$を用いて計算されているので、当然$y^((2))$に関する偏微分$(partial cal(L))/(partial y^((2)))$は$y^((2))$と$t$を用いて計算可能であり、既知である。同様に、$y^((2))$は$w^((2))$と$x^((2))$を用いて計算されているので、$w^((2))$に関する偏微分$(partial y^((2)))/(partial w^((2)))$も既知である。したがって、$w^((2))$に関する偏微分$(partial cal(L))/(partial w^((2)))$は求めることができる。
+
+次に、$w^((1))$による偏微分を求める。$w^((1))$は$y^((1))$に寄与しており、$y^((1))$は$x^((2))$と同一である。$x^((2))$は$y^((2))$に寄与しており、$y^((2))$は$cal(L)$に寄与している。したがって、$w^((1))$の偏微分は連鎖律をもって以下のように表される。
+$
+  (partial cal(L))/(partial w^((1))) = (partial cal(L))/(partial y^((2))) (partial y^((2)))/(partial x^((2)))(partial y^((1)))/(partial w^((1)))
+$
+これらはすべて既知であるので、$w^((1))$に関する偏微分$(partial cal(L))/(partial w^((1)))$は求めることができる。ここで重要なのは、学習可能なパラメータではない$x^((2))$に関する偏微分を用意しておく必要があるのである。それ自体は学習に使うわけではないが、より上位の層に伝播するために必要である。これを逆伝播とよぶ。
+
+つまり、各層ではより下位（順伝播では次に値する層）からの偏微分係数を受け取り、連鎖律を用いて学習可能なパラメータの勾配を求め、上位の層に伝播するために順伝播では入力に値するものの偏微分係数を求めるように実装すれば、繰り返し行うことですべてのパラメータに関する偏微分を求めることができる。では、各層の逆伝播の計算を順伝播の計算を元に求めることを次に考える。
+
+
 === 実数の逆伝播
-行列で逆伝播を考える前に、実数の逆伝播法を考える。例えばある実数を返す関数$cal(L)$#footnote[表現からも分かる通り、損失関数を念頭に置いている。]に関してある出力$y$による偏微分係数が既知であるとする。そして入力$x$に関して、
+行列で逆伝播を考える前に、実数の逆伝播法を考える。例えばある実数を返す関数$cal(L)$#footnote[表現からも分かる通り、損失関数を念頭に置いている。]に関してある出力$y$による偏微分係数$display((partial cal(L))/(partial y))$が既知であるとする。そして入力$x$に関して、
 $
   y = w x + b
 $
@@ -824,7 +876,9 @@ Adamは、MomentumとRMSPropを組み合わせたものである。
 $
   bold(M) & arrow.l beta_1 bold(M) + (1 - beta_1) (partial cal(L))/(partial bold(P))\
   bold(G) & arrow.l beta_2 bold(G) + (1 - beta_2) (partial cal(L))/(partial bold(P)) circle.small (partial cal(L))/(partial bold(P))\
-  bold(P) & arrow.l bold(P) - eta/sqrt(bold(G)) bold(M)
+  hat(bold(M)) &= bold(M)/(1-beta_1^(t+1)) wide hat(bold(G)) = bold(G)/(1-beta_2^(t+1))\
+  bold(P) & arrow.l bold(P) - eta/sqrt(hat(bold(G))) hat(bold(M))\
+  t & <- t + 1\
 $
 
 == レイヤ
