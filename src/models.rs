@@ -59,6 +59,7 @@ impl BaseModel {
           .unwrap()
           .progress_chars("##-"),
       );
+      self.main_layer.set_training(true);
       for (x_train, y_train) in train_data {
         let y_pred = self.main_layer.forward(x_train.clone());
         let loss_value = self.loss_func.forward(y_pred.clone(), y_train.clone());
@@ -83,6 +84,7 @@ impl BaseModel {
           .unwrap()
           .progress_chars("##-"),
       );
+      self.main_layer.set_training(false);
       for (x_val, y_val) in val_data {
         let y_pred = self.main_layer.forward(x_val.clone());
         let loss_value = self.loss_func.forward(y_pred.clone(), y_val.clone());
@@ -133,6 +135,7 @@ impl BaseModel {
       );
 
       for (x_train, y_train) in train_data {
+        self.main_layer.set_training(true);
         let y_pred = self.main_layer.forward(x_train.clone());
         let loss_value = self.loss_func.forward(y_pred.clone(), y_train.clone());
         let acc = self.accuracy.accuracy(&y_pred, &y_train);
@@ -141,6 +144,7 @@ impl BaseModel {
         self.optimizer.update(self.main_layer.params_mut());
 
         let (x_val, y_val) = val_data.choose(&mut rand::thread_rng()).unwrap();
+        self.main_layer.set_training(false);
         let y_pred = self.main_layer.forward(x_val.clone());
         let val_loss = self.loss_func.forward(y_pred.clone(), y_val.clone());
         let val_acc = self.accuracy.accuracy(&y_pred, &y_val);
@@ -161,10 +165,12 @@ impl BaseModel {
     result
   }
   pub fn predict(&mut self, input: ArrayD<f64>) -> ArrayD<f64> {
+    self.main_layer.set_training(false);
     self.main_layer.forward(input)
   }
 
   pub fn loss(&mut self, input: ArrayD<f64>, target: ArrayD<f64>) -> f64 {
+    self.main_layer.set_training(false);
     let y_pred = self.main_layer.forward(input);
     self.loss_func.forward(y_pred, target)
   }

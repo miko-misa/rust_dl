@@ -35,4 +35,9 @@ impl Layer for Sequential {
       .flat_map(|layer| layer.params_mut())
       .collect()
   }
+  fn set_training(&mut self, training: bool) {
+    for layer in &mut self.layers {
+      layer.set_training(training);
+    }
+  }
 }

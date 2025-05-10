@@ -9,6 +9,7 @@ pub trait Layer {
   fn forward(&mut self, input: ArrayD<f64>) -> ArrayD<f64>;
   fn backward(&mut self, grad: ArrayD<f64>) -> ArrayD<f64>;
   fn params_mut(&mut self) -> Vec<&mut LearnableParameter>;
+  fn set_training(&mut self, training: bool);
 }
 
 pub struct AffineLayer {
@@ -16,6 +17,7 @@ pub struct AffineLayer {
   bias: LearnableParameter,
   input_cache: Option<Array<f64, Ix2>>,
   weight_reg: Option<Box<dyn Regularizer>>,
+  training: bool,
 }
 
 impl AffineLayer {
@@ -37,6 +39,7 @@ impl AffineLayer {
       bias,
       input_cache: None,
       weight_reg,
+      training: true,
     }
   }
 }
@@ -78,6 +81,9 @@ impl Layer for AffineLayer {
   fn params_mut(&mut self) -> Vec<&mut LearnableParameter> {
     vec![&mut self.weight, &mut self.bias]
   }
+  fn set_training(&mut self, training: bool) {
+    self.training = training;
+  }
 }
 
 pub struct ReLU {
@@ -112,6 +118,7 @@ impl Layer for ReLU {
   fn params_mut(&mut self) -> Vec<&mut LearnableParameter> {
     vec![]
   }
+  fn set_training(&mut self, _: bool) {}
 }
 
 pub struct Softmax {
@@ -161,6 +168,7 @@ impl Layer for Softmax {
   fn params_mut(&mut self) -> Vec<&mut LearnableParameter> {
     vec![]
   }
+  fn set_training(&mut self, _: bool) {}
 }
 
 pub struct BatchNorm {
@@ -169,6 +177,7 @@ pub struct BatchNorm {
   mean: Array<f64, Ix1>,
   var: Array<f64, Ix1>,
   z_cache: Option<Array<f64, Ix2>>,
+  training: bool,
 }
 
 impl BatchNorm {
@@ -187,6 +196,7 @@ impl BatchNorm {
       mean,
       var,
       z_cache: None,
+      training: true,
     }
   }
 }
@@ -240,19 +250,28 @@ impl Layer for BatchNorm {
   fn params_mut(&mut self) -> Vec<&mut LearnableParameter> {
     vec![&mut self.weight, &mut self.bias]
   }
+  fn set_training(&mut self, _: bool) {}
 }
 
 struct Dropout {
   p: f64,
   mask: Option<Array<f64, Ix2>>,
+  training: bool,
 }
 impl Dropout {
   pub fn new(p: f64) -> Self {
-    Dropout { p, mask: None }
+    Dropout {
+      p,
+      mask: None,
+      training: true,
+    }
   }
 }
 impl Layer for Dropout {
   fn forward(&mut self, input: ArrayD<f64>) -> ArrayD<f64> {
+    if !self.training {
+      return input;
+    }
     let x = input.view().into_dimensionality::<Ix2>().unwrap();
     let mask = Array::random(x.raw_dim(), rand::distributions::Uniform::new(0.0, 1.0));
     self.mask = Some(mask.clone());
@@ -269,5 +288,8 @@ impl Layer for Dropout {
 
   fn params_mut(&mut self) -> Vec<&mut LearnableParameter> {
     vec![]
+  }
+  fn set_training(&mut self, training: bool) {
+    self.training = training;
   }
 }
