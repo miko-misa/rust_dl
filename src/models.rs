@@ -3,12 +3,15 @@ use ndarray::ArrayD;
 use ndarray_rand::rand;
 use rand::seq::SliceRandom;
 
-use crate::{losses::LossFunction, networks::layer::Layer, optimizers::Optimizer};
+use crate::{
+  accuracies::Accuracy, losses::LossFunction, networks::layer::Layer, optimizers::Optimizer,
+};
 
 pub struct BaseModel {
   main_layer: Box<dyn Layer>,
   loss_func: Box<dyn LossFunction>,
   optimizer: Box<dyn Optimizer>,
+  accuracy: Box<dyn Accuracy>,
 }
 
 impl BaseModel {
@@ -16,11 +19,13 @@ impl BaseModel {
     main_layer: Box<dyn Layer>,
     loss_func: Box<dyn LossFunction>,
     optimizer: Box<dyn Optimizer>,
+    accuracy: Box<dyn Accuracy>,
   ) -> Self {
     BaseModel {
       main_layer,
       loss_func,
       optimizer,
+      accuracy,
     }
   }
 
@@ -101,7 +106,7 @@ impl BaseModel {
     epochs: usize,
     train_data: &Vec<(ArrayD<f64>, ArrayD<f64>)>,
     val_data: &Vec<(ArrayD<f64>, ArrayD<f64>)>,
-  ) -> Vec<(f64, f64)> {
+  ) -> Vec<(f64, f64, f64, f64)> {
     let mut result = vec![];
 
     let m = MultiProgress::new();
@@ -130,6 +135,7 @@ impl BaseModel {
       for (x_train, y_train) in train_data {
         let y_pred = self.main_layer.forward(x_train.clone());
         let loss_value = self.loss_func.forward(y_pred.clone(), y_train.clone());
+        let acc = self.accuracy.accuracy(&y_pred, &y_train);
         let grad = self.loss_func.backward(y_pred.clone(), y_train.clone());
         self.main_layer.backward(grad);
         self.optimizer.update(self.main_layer.params_mut());
@@ -137,12 +143,13 @@ impl BaseModel {
         let (x_val, y_val) = val_data.choose(&mut rand::thread_rng()).unwrap();
         let y_pred = self.main_layer.forward(x_val.clone());
         let val_loss = self.loss_func.forward(y_pred.clone(), y_val.clone());
+        let val_acc = self.accuracy.accuracy(&y_pred, &y_val);
         epoch_pb.set_message(format!(
           "Train Loss: {} Validation Loss: {}",
           loss_value, val_loss
         ));
 
-        result.push((loss_value, val_loss));
+        result.push((loss_value, val_loss, acc, val_acc));
 
         epoch_pb.inc(1);
         overall_pb.inc(1);
