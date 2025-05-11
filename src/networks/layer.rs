@@ -253,7 +253,7 @@ impl Layer for BatchNorm {
   fn set_training(&mut self, _: bool) {}
 }
 
-struct Dropout {
+pub struct Dropout {
   p: f64,
   mask: Option<Array<f64, Ix2>>,
   training: bool,

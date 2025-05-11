@@ -11,7 +11,7 @@ mod tests {
   use crate::accuracies::{Accuracy, OnehotArgmaxAccuracy};
   use crate::losses::{CrossEntropyLoss, LossFunction};
   use crate::models::BaseModel;
-  use crate::networks::layer::{AffineLayer, BatchNorm, Layer, ReLU, Softmax};
+  use crate::networks::layer::{AffineLayer, BatchNorm, Dropout, Layer, ReLU, Softmax};
   use crate::optimizers::{Adam, Momentum, RMSProp, SGD};
   use crate::params::initializer::{HeInitializer, ZeroInitializer};
   use crate::{
@@ -34,13 +34,15 @@ mod tests {
     let zero_init = ZeroInitializer;
     let model_layer = Sequential::new(vec![
       Box::new(AffineLayer::new(784, 128, &he_init, &zero_init, None)),
-      // Box::new(BatchNorm::new(128, &he_init, &zero_init)),
+      Box::new(BatchNorm::new(128, &he_init, &zero_init)),
       Box::new(ReLU::new()),
+      Box::new(Dropout::new(0.2)),
       Box::new(AffineLayer::new(128, 64, &he_init, &zero_init, None)),
-      // Box::new(BatchNorm::new(64, &he_init, &zero_init)),
+      Box::new(BatchNorm::new(64, &he_init, &zero_init)),
       Box::new(ReLU::new()),
+      Box::new(Dropout::new(0.2)),
       Box::new(AffineLayer::new(64, 10, &he_init, &zero_init, None)),
-      // Box::new(BatchNorm::new(10, &he_init, &zero_init)),
+      Box::new(BatchNorm::new(10, &he_init, &zero_init)),
       Box::new(Softmax::new()),
     ]);
     let mut model = BaseModel::new(
