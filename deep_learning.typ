@@ -12,7 +12,7 @@
   }
 })
 
-#let batch = $abs(b)$
+#let batch = $B$
 
 #show: init.with(
   header-left: "DeepLearning 入門",
@@ -53,13 +53,45 @@
 #pagebreak()
 
 = 本書で用いる表現について
-- ベクトルは太文字の小文字で表す。（$bold(x)$）
-- 行列は太文字の大文字で表す。（$bold(X)$）
-- スカラーは通常の小文字で表す。（$x$）
-- 行列の要素は定義のうえ、通常の小文字と添字で表す。添字は行、列の順に表記し、わかりにくい場合を除き区切り文字をつけない。（$x_(i j)$$x_(i+1,j)$）
-- 行列の要素について断りがない時、行列名$bold(X)$を用いて$[bold(X)]_(i j)$と表すことがある。添字は同様。
-- $N$次元ベクトルは大きさ$1 times N$の行列とみなし、いわゆる行ベクトルとする。
-- 列ベクトルの要素表示は通常、行ベクトルと転置記号$top$を用いて表す。わかりやすさのため、列ベクトルそのものを書くこともある。
+#align(center + horizon)[
+#table(
+  columns: (1fr,30pt, 2fr),
+  align: (right + top, center + top, left + top),
+  stroke: none,
+  [$x$$X$],[],[スカラー],
+  [$bold(x)$],[],[行ベクトル（小文字・太文字）\ $1times N$の行列と同一視する],
+  [$x_j$],[],[ベクトル$bold(x)$の$j$成分（特に指定がない場合）],
+  [$bold(1)_n$],[],[要素数$n$で成分が全て$1$の列ベクトル],
+  [$bold(X)$],[],[行列（大文字・太文字）],
+  [$x_(i j)$$x^((i))_j$],[],[行列$bold(X)$の$i,j$成分（特に指定がない場合）],
+  [$[bold(X)]_(i j)$],[],[行列$bold(X)$の$i,j$成分],
+  [$bold(X)^top$],[],[行列$bold(X)$の転置],
+  [$[bold(X)]_(i*)$ $bold(x)^((i))$],[],[行列$bold(X)$の$i$行を表す行ベクトル],
+  [$[bold(X)]_(*j)$],[],[行列$bold(X)$の$j$列を表す列ベクトル],
+  [$bold(x) dot bold(y)$],[],[ベクトル$bold(x)$とベクトル$bold(y)$の標準内積],
+  [$bold(x) dot.circle bold(y)$],[],[ベクトル$bold(x)$とベクトル$bold(y)$のアダマール積],
+  [$display(bold(x) / bold(y))$],[],[ベクトル$bold(x)$とベクトル$bold(y)$のアダマール除算],
+  [$bold(x)^(circle.tiny n)$],[],[ベクトル$bold(x)$自身とのアダマール積を$n$回行ったもの\
+  各要素を$n$乗したものと一致する],
+  [$bold(X) dot bold(Y)$],[],[行列$bold(X)$と行列$bold(Y)$のドット積],
+  [$bold(X) dot.circle bold(Y)$],[],[行列$bold(X)$と行列$bold(Y)$のアダマール積],
+  [$display((X) / bold(Y))$],[],[行列$bold(X)$と行列$bold(Y)$のアダマール除算],
+  [$sqrt(bold(X))$],[],[行列$bold(X)$の各成分の平方根をとった行列\
+  $[sqrt(bold(X))]_(i j) = sqrt([bold(X)])_(i j)$],
+  [$display((partial)/(partial x))$],[],[スカラー$x$に関する偏微分作用素],
+  [],[],[],
+  [$display((partial)/(partial bold(x)))$],[],[$display(((partial)/(partial x_1), (partial)/(partial x_2), dots, (partial)/(partial x_n)))$],
+  [],[],[],
+  [$display((partial)/(partial bold(X)))$],[],[$display([(partial)/(partial bold(X))]_(i j) = (partial)/(partial x_(i j)))$],
+  [$EE[f(x_1,x_2,dots,x_n)]$],[],[確率変数$x_1,x_2,dots,x_n$に依存する関数$f$の期待値],
+  [$EE_p [f(x_1,x_2,dots,x_n)]$],[],[確率変数$p$に依存する関数$f$の期待値],
+  [$cal(N)(mu, sigma^2)$],[],[平均$mu$、分散$sigma^2$の正規分布],
+  [$text("Bi")(p)$],[],[期待値$p$のベルヌーイ分布],
+  [$x ~ mu$],[],[$mu$が確率分布を表すとき$x$はその分布に従うことを表す\
+  しばしば、分布$mu$から$x$をサンプリングすることを表す],
+)
+]
+
 
 #pagebreak()
 
@@ -513,7 +545,7 @@ $
 いくつかの損失関数があるが、ここでは代表的なものを紹介する。\
 
 === 平均二乗誤差
-平均二乗誤差は、$bold(y)_text("pred")$と$bold(y)_text("train")$の個々の差を二乗して足し合せて平均をとったものである。これは、出力の値が連続的な場合に用いられる。\
+平均二乗誤差は、$bold(y)$と$bold(t)$の個々の差を二乗して足し合せて平均をとったものである。これは、出力の値が連続的な場合に用いられる。\
 $
   cal(L)_text("MSE") = 1/C abs(abs(bold(y) - bold(t)))^2
 $
@@ -522,7 +554,7 @@ $
 クロスエントロピー誤差は、$bold(y)$と$bold(t)$を確率分布とみなして、その確率分布の誤差を表すものである。分類問題において使われることが多い。Softmax関数と組み合わせて用いることが多い。\
 
 $
-  cal(L)_text("CrossEntropy") = -sum_(1<=j<=C) t_i log(y_i)
+  cal(L)_text("CrossEntropy") = -sum_(1<=j<=C) t_j log(y_j)
 $
 
 #colbreak()
@@ -661,7 +693,7 @@ $
   (partial cal(L))/(partial w) &= (partial cal(L))/(partial y) (partial y)/(partial w) &=& x (partial cal(L))/(partial y)\
   (partial cal(L))/(partial b) &= (partial cal(L))/(partial y) (partial y)/(partial b) &=& (partial cal(L))/(partial y)\
 $
-ここで、$display((partial cal(L))/(partial y))$は既知であるので,入力とパラメータに関する偏微分係数を求めることができた。$display((partial cal(L))/(partial x))$はなぜ求めたのだろうか。これは$x$が前の層の出力であるからである。つまり、$display((partial cal(L))/(partial x))$はこの前の層にとっては既知とされた$display((partial cal(L))/(partial y))$に対応するのだ。\
+ここで、$display((partial cal(L))/(partial y))$は既知であるので,入力とパラメータに関する偏微分係数を求めることができた。$display((partial cal(L))/(partial x))$はこの前の層にとっては既知とされた$display((partial cal(L))/(partial y))$に対応する。\
 
 === Affine層の逆伝播
 ある行列$bold(X) in MM^(n times m)$について$display(partial/(partial bold(X)))$を次のように定義する。
@@ -735,9 +767,8 @@ $
 $
 となる。$b_j$は$y_(i j)$に依存しているので、$j$番目の列の和をとることになる。したがって、逆伝播は以下のように表せる。
 $
-  (partial cal(L))/(partial bold(b)) = sum_(1<=i<=n) [(partial cal(L))/(partial bold(Y))]_(i)\
+  (partial cal(L))/(partial bold(b)) = sum_(1<=i<=n) [(partial cal(L))/(partial bold(Y))]_(i,*)\
 $
-ここで、$[(partial cal(L))/(partial bold(Y))]_(i)$は$(partial cal(L))/(partial bold(Y))$の$i$行目を表す。
 
 === ReLU関数の逆伝播
 ReLU関数は非常に簡単に逆伝播できる。ReLU関数は以下のように定義されていた。
@@ -865,7 +896,7 @@ $
 === RMSProp
 RMSPropは、SGDの更新に対して学習率を調整する機能を付け加えたものである。更新分が一定だと、最小に近づくにつれ、更新幅が必要な幅より大きくなってしまう問題を解決するため、更新幅の分だけ学習率を割り引く。更新幅は指数移動平均を用いて計算し、ある程度過去の更新幅を引き継ぐ。
 $
-  bold(G) & arrow.l beta bold(G) + (1 - beta) (partial cal(L))/(partial bold(P)) circle.small (partial cal(L))/(partial bold(P))\
+  bold(G) & arrow.l beta bold(G) + (1 - beta) (partial cal(L))/(partial bold(P)) dot.circle (partial cal(L))/(partial bold(P))\
   bold(P) & arrow.l bold(P) - eta/sqrt(bold(G)) (partial cal(L))/(partial bold(P)) \
 $
 
@@ -875,28 +906,37 @@ $
 Adamは、MomentumとRMSPropを組み合わせたものである。
 $
   bold(M) & arrow.l beta_1 bold(M) + (1 - beta_1) (partial cal(L))/(partial bold(P))\
-  bold(G) & arrow.l beta_2 bold(G) + (1 - beta_2) (partial cal(L))/(partial bold(P)) circle.small (partial cal(L))/(partial bold(P))\
+  bold(G) & arrow.l beta_2 bold(G) + (1 - beta_2) (partial cal(L))/(partial bold(P)) dot.circle (partial cal(L))/(partial bold(P))\
   hat(bold(M)) &= bold(M)/(1-beta_1^(t+1)) wide hat(bold(G)) = bold(G)/(1-beta_2^(t+1))\
   bold(P) & arrow.l bold(P) - eta/sqrt(hat(bold(G))) hat(bold(M))\
   t & <- t + 1\
 $
 
+=== AdamW
+AdamWは、AdamにL2正則化を加えたものである。L2正則化とAdamWの構造についてはペナルティ項の追加にて後述する。
+
 == レイヤ
 Affine層や活性化関数層以外の、レイヤを追加することで学習を加速あるいは、精度を上げることができる。ここでは、代表的なレイヤを紹介する。\
 
-=== Batch Normalization
+=== Batch Normalization層
 ==== 順伝播
 学習時はバッチを用いて複数のデータを同時に学習する。この際、バッチ内のデータに偏りが存在する場合があり、学習が進まないことがある。また、途中の層の出力が極端になってしまうことがある。これを防ぐために、バッチ内のデータについて、各特徴量を正則化する。その後、学習可能なパラメータを用いて、正則化したデータを変換する。これをBatch Normalization（以下、BN）とよぶ。入力が$bold(X) in MM^(B times C)$の行列である場合、正則化を行うのは列ごとであることに注意されたい。
 
 ここでは$bold(X)$の$i$行目ベクトルを$bold(x)^((i))$とする。ここでは、要素$x^((i))_j$がどのように正則化されるかを考える。その際、$j$列目のことのみを考えればよい。$j$行目の平均を$mu_j$、分散を$sigma_j$とし、中間出力を$bold(z)^((i))$、最終出力を$bold(y)^((i))$とする。すると、BNは以下のように行われる。
 $
   mu_j &= 1/B sum_(1<=k<=B) x^((k))_j\
-  sigma_j &= 1/B sum_(1<=k<=B) (x^((k))_j - mu_j)^2\
+  sigma^2_j &= 1/B sum_(1<=k<=B) (x^((k))_j - mu_j)^2\
   z^((i))_j &= (x^((i))_j - mu_j) / sigma_j\
   y^((i))_j &= gamma_j z^((i))_j + beta_j\
 $
 
-ここで、$gamma_j$と$beta_j$は学習可能なパラメータで、行ごとに別の値が適応される。正則化後のデータを適切にスケールするためのものである。$mu_j$、$sigma_j$は推論時に列ごとに計算される。つまり、実際には$bold(gamma), bold(beta), bold(mu), bold(sigma)$はベクトルである。
+ここで、$gamma_j$と$beta_j$は学習可能なパラメータで、行ごとに別の値が適応される。正則化後のデータを適切にスケールするためのものである。$mu_j$、$sigma_j$は推論時に列ごとに計算される。つまり、実際には$bold(gamma), bold(beta), bold(mu), bold(sigma)$はベクトルである。次に、推論時では平均と標準偏差はbatch内のデータを用いて計算されない。なぜなら、推論時には学習時にくらべて少ないデータが入力されるからである。したがって、学習時に平均と分散をある程度計算しておく必要がある。
+毎ステップ、上で計算したバッチの平均と分散を用いて推論時に用いる平均$bold(mu)_text("running")$と分散$bold(sigma)^(circle.tiny 2)_text("running")$を更新する。$alpha$は係数である。
+$
+  bold(mu)_text("running") &<- alpha * bold(mu)_text("running") + (1 - alpha) bold(mu)\
+  bold(sigma)^(circle.tiny 2)_text("running") &<- alpha * bold(sigma)^(circle.tiny 2)_text("running") + (1 - alpha) bold(sigma)^(circle.tiny 2)\
+$
+推論時には$bold(mu)$と$bold(sigma)$の代わりに$bold(mu)_text("running")$と$bold(sigma)_text("running")$を用いる。
 
 ==== 逆伝播
 次に、学習可能なパラメータである$bold(gamma)$と$bold(beta)$と、$bold(X)$の逆伝播を考える。ここでも、$(partial cal(L))/(partial bold(Y))$は既知とする。まずは、$bold(Y)$から$bold(Z)$までの逆伝播を考える。まず、$gamma_j, beta_j, z^((i))_j$の損失関数$cal(L)$に対する依存関係を整理しよう。
@@ -915,7 +955,7 @@ $
 $
 である。つまり、ベクトル表現を用いると
 $
-  (partial cal(L))/(partial bold(gamma)) &= sum_(1<=k<=B) (partial cal(L))/(partial bold(y)^((k))) circle.small bold(z)^((k))\
+  (partial cal(L))/(partial bold(gamma)) &= sum_(1<=k<=B) (partial cal(L))/(partial bold(y)^((k))) dot.circle bold(z)^((k))\
   (partial cal(L))/(partial bold(beta)) &= sum_(1<=k<=B) (partial cal(L))/(partial bold(y)^((k)))\
 $
 となる。次に、$bold(Z)$から$bold(X)$までの逆伝播を考える。注意すべき点は$x^((i))_j$が$mu$や$sigma$に寄与しており、それがすべての$z^((k))_j (1 <= forall k <= B)$に寄与していることである。計算しやすさのため、$u^((i))_j colon=x^((i))_j - mu_j$を定義する。すると、$sigma_j$は
@@ -1033,14 +1073,115 @@ $
 $
 となる。この式はすべての$j$列に対して成立するのでベクトル表現を用いれば以下のように整理できる。
 $
-  (partial cal(L))/(partial bold(x)^((i))) = bold(gamma)/bold(sigma) circle.small [
-    (partial cal(L))/(partial bold(y)^((i))) - 1/B { bold(z)^((i)) circle.small (partial cal(L))/(partial bold(gamma)) + (partial cal(L))/(partial bold(beta))}
+  (partial cal(L))/(partial bold(x)^((i))) = bold(gamma)/bold(sigma) dot.circle [
+    (partial cal(L))/(partial bold(y)^((i))) - 1/B { bold(z)^((i)) dot.circle (partial cal(L))/(partial bold(gamma)) + (partial cal(L))/(partial bold(beta))}
   ]\
 $
 
 さらに成分がすべて$1$で大きさ$B$の列ベクトル$bold(1)_B$を用いて行列表現に拡張すると以下のようになる。
 $
-  (partial cal(L))/(partial bold(X)) = (bold(1)_B dot bold(gamma)/bold(sigma)) circle.small [
-    (partial cal(L))/(partial bold(Y)) - 1/B { bold(Z) circle.small (bold(1)_B dot (partial cal(L))/(partial bold(gamma))) + bold(1)_B dot (partial cal(L))/(partial bold(beta))}
+  (partial cal(L))/(partial bold(X)) = (bold(1)_B dot bold(gamma)/bold(sigma)) dot.circle [
+    (partial cal(L))/(partial bold(Y)) - 1/B { bold(Z) dot.circle (bold(1)_B dot (partial cal(L))/(partial bold(gamma))) + bold(1)_B dot (partial cal(L))/(partial bold(beta))}
   ]\
 $
+
+=== Dropout層
+Dropoutは、学習時にランダムにノードを無効化することで、過学習を防ぐ手法である。そもそも背景として、構造の異なる複数のモデルを学習させ、それらの結果を平均化することで、より精度の高いモデルを得るという方法がある。これをアンサンブル学習と呼ぶ。Dropoutはミニバッチごとにある一定確率でニューロン（ノード）を無効化することで、アンサンブル学習に似た効果を得る手法である。Dropoutは、学習時にのみ適応される。推論時はすべてのニューロンを有効化する。また、推論時と同様のスケールに保つため、学習時はDropoutを適応した後にスケールを合わせる必要がある。このDropoutをレイヤとして実装することを考える。
+==== 順伝播
+全結合層の順伝播でニューロンを無効化するということは、ニューロンの出力を$0$にするということである。無効化を行う層の単一の出力を$bold(y)$とする。これはAffine層の出力に関して活性化関数を作用させたものである。もし、$j$番目のニューロンを無効化するならば$y_j = 0$とするということである。つまり、Dropout層はDropoutを適応する全結合層の後に適応するように設計するのが適当である。
+
+まず一つのニューロンが無効化される確率を$p$とする。すると全体で$n$個のニューロンがあった時に、$k$個のニューロンが無効化される確率$P^minus (k)$は
+$
+  P^minus (k) = binom(n, k) p^k (1 - p)^(n - k)\
+$
+である。つまりその期待値は
+$
+  E^minus &= sum_(0<=k<=n) k P^minus (k)\
+  &= sum_(1<=k<=n) n!/((k-1)!(n-k)!) p^k (1 - p)^(n - k)\
+  &= n p sum_(0<=k<=n-1) (n-1)!/(k!(n-k-1)!) p^k (1 - p)^(n - k - 1)\
+  &= n p (p + (1-p))^(n - 1) = n p\
+$
+つまり全体のうち、割合$p$だけのニューロンが無効化される。つまり、$1 - p$の割合のニューロンが有効化される。推論時に比べ、$1-p$のスケールが学習時に出力される。これを推論時と同じスケールにするために$1-p$で割る。また、無効化される成分を$0$、そうでない成分を$1$とするベクトル$bold(r)$を用いる。すると、$bold(r)$は$p$の確率で$0$、$1-p$の確率で$1$となる。これは$bold(r)$の各成分がベルヌーイ分布に従うことを意味する。つまり、Dropout層の順伝播は以下のように表現できる。
+$
+  r_j &~ B i(1-p) quad (1 <= forall j <= n)\
+  hat(bold(y)) &= (bold(r) dot.circle bold(y)) / (1 - p) \
+$
+さて、バッチ学習においてもこれらは基本的に同じである。どのニューロンを無効化するかは、バッチごとではなくデータごとに決定される。つまり、全結合層の出力$bold(Y) in MM^(B times C)$に対して、Dropoutを適応した出力$hat(bold(Y)) in MM^(B times C)$は
+$
+  r_(i j) &~ B i(1-p) quad (1 <= forall i <= B, 1 <= forall j <= C)\
+  hat(bold(Y)) &= (bold(Y) dot.circle bold(R)) / (1 - p)\
+$
+で計算される。
+
+==== 逆伝播
+Dropout層には学習可能なパラメータは存在しない。つまり、$display((partial cal(L))/(partial bold(Y)))$のみを考えればいい。
+
+$
+  hat(y)_(i j) &= (y_(i j) r_(i j)) / (1 - p)\
+  (partial hat(y)_(i j))/(partial y_(i j)) &= r_(i j)/(1 - p)\
+$
+より、
+$
+  (partial cal(L))/(partial y_(i j)) &= (partial cal(L))/(partial hat(y)_(i j)) (partial hat(y)_(i j))/(partial y_(i j))\
+  &= (partial cal(L))/(partial hat(y)_(i j)) r_(i j)/(1 - p)\
+  therefore (partial cal(L))/(partial bold(Y)) &= 1/(1 - p) (partial cal(L))/(partial bold(hat(Y))) dot.circle bold(R)\
+$
+となる。
+
+== ペナルティ項の追加
+ペナルティ項とは過学習を防ぐために損失関数に追加する項である。過学習の状況ではパラメータが汎用性を失うため、重みといったパラメータが非常に複雑な値をとることがある。これを防ぐために、パラメータの「大きさ」をペナルティとして追加する。パラメータの「大きさ」を求める手法でいくつかの違いが存在する。ここでは、L1正則化とL2正則化を紹介する。一方で、実装においては損失関数にペナルティ項を追加するのではなく、Optimizerなどの更新時に用いる勾配を変更することで実装することがある。あるペナルティ項を$cal(P)$とすると、ペナルティ項を追加した損失関数は
+$
+  cal(L)_text("new") &= cal(L) + cal(P)\
+$
+である。これを用いてパラメータ$p$の勾配を考えると、
+$
+  (partial cal(L)_text("new"))/(partial p) &= (partial cal(L))/(partial p) + (partial cal(P))/(partial p)\
+$
+となる。$(partial cal(L))/(partial p)$は元の損失関数を用いて今まで通り計算を行った勾配である。つまり、その元の勾配の代わりにそれに$(partial cal(P))/(partial p)$を加えてものを用いることでペナルティ項を追加することができる。
+=== L1正則化（Lasso：Least Absolute Shrinkage and Selection Operator）
+L1正則化は、パラメータの「大きさ」としてL1ノルムを用いる手法である。L1ノルムは、パラメータの絶対値の和である。つまり、新たな損失関数$cal(L)_text("L1")$は
+$
+  cal(L)_text("L1") &= cal(L) + lambda ||bold(P)||_1 = cal(L) + lambda sum_(i) |p_i|\
+$
+となる。つまり、新たな勾配とのSGDにおける更新式は
+$
+  (partial cal(L)_text("L1"))/(partial p_i) &= (partial cal(L))/(partial p_i) + lambda (partial cal(P))/(partial p_i)\
+  &= (partial cal(L))/(partial p_i) + lambda text("sign")(p_i)\
+  p_i &<- p_i - eta (partial cal(L))/(partial p_i) - eta lambda text("sign")(p_i)\
+$
+となる。$text("sign")(p_i)$は$p_i$の符号を表す関数である。つまり、$p_i$が正ならば$1$、負ならば$-1$、$0$ならば$0$となる。L1正則化は、比較的強くパラメータを$0$に近づける。なぜなら、パラメータが$0$でなければ、そのスケールに関わらず勾配のペナルティ項の絶対値は$1$である。すると、パラメータが$0$でない限りそれを$0$に近づけようとする力は常に一定で働く。これは結果として、必要最低限のパラメータを取捨選択することにつながり、必要最低限で非常に疎なパラメータを得ることができる。これをスパース性という。
+
+=== L2正則化（Ridge）
+L2正則化は、パラメータの「大きさ」としてL2ノルムを用いる手法である。しかし、諸々の理由でL2ノルムそのものではなく、その2乗を用いる。新たな損失関数$cal(L)_text("L2")$は
+$
+  cal(L)_text("L2") &= cal(L) + lambda/2 ||bold(P)||^2_2 = cal(L) + lambda/2 sum_(i) p_i^2\
+$
+である。ここで、勾配計算の簡単さから$1/2$を掛けている。つまり、新たな勾配とSGDにおける更新式は
+$
+  (partial cal(L)_text("L2"))/(partial p_i) &= (partial cal(L))/(partial p_i) + lambda p_i\
+  p_i &<- p_i - eta (partial cal(L))/(partial p_i) - eta lambda p_i\
+$
+となる。L2正則化は、すべてのパラメータを$0$に近づけるように働く。しかし、一方でL1正則化とは異なり、パラメータを$0$に近づける力はパラメータの大きさに依存しているので、$0$に近づけるにつれその力は弱まる。つまり、パラメータはそこまで$0$にはならない。一方で、パラメータが複雑になることを防ぐことができる。
+
+=== L1L2正則化（Elastic Net）
+L1L2正則化は、L1正則化とL2正則化を純粋に足し合わせたものである。新たな損失関数$cal(L)_text("L1L2")$は
+$
+  cal(L)_text("L1L2") &= cal(L) + lambda_1 sum_(i) |p_i| + lambda_2/2 sum_(i) p_i^2\
+$
+となる。つまり、新たな勾配とSGDにおける更新式は
+$
+  (partial cal(L)_text("L1L2"))/(partial p_i) &= (partial cal(L))/(partial p_i) + lambda_1 text("sign")(p_i) + lambda_2 p_i\
+  p_i &<- p_i - eta (partial cal(L))/(partial p_i) - eta lambda_1 text("sign")(p_i) - eta lambda_2 p_i\
+$
+となる。
+
+=== L2正則化の問題点とAdamW
+L2正則化をAdamと組み合わせて学習を行うと、置き換えたのちの勾配を用いてAdamの更新式を用いることになる。つまり、L2正則化を行うと、Adamの性質よりそのペナルティ項も含めて更新式を計算することになり、ペナルティ項がAdamでのスケーリングの影響を受けてしまう。これを防ぐために、AdamWという手法が提案された。AdamWは、L2正則化のペナルティ項を含めない勾配を用いてスケーリングを行ったのち、更新時にペナルティ項を加える手法である。つまり、L2正則化をOptimizerで担うのである。式は以下のようになる。
+$
+  bold(M) & arrow.l beta_1 bold(M) + (1 - beta_1) (partial cal(L))/(partial bold(P))\
+  bold(G) & arrow.l beta_2 bold(G) + (1 - beta_2) (partial cal(L))/(partial bold(P)) dot.circle (partial cal(L))/(partial bold(P))\
+  hat(bold(M)) &= bold(M)/(1-beta_1^(t+1)) wide hat(bold(G)) = bold(G)/(1-beta_2^(t+1))\
+  bold(P) & arrow.l bold(P) - eta/sqrt(hat(bold(G))) hat(bold(M)) - eta lambda bold(P)\
+  t & <- t + 1\
+$
+Adamと見比べてみると、$bold(P)$の更新式にペナルティ項が追加されていることがわかる。
