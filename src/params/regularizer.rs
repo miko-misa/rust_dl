@@ -14,7 +14,7 @@ impl L2 {
 }
 impl Regularizer for L2 {
   fn apply(&self, grad: ArrayD<f64>, value: ArrayD<f64>) -> ArrayD<f64> {
-    grad + self.lambda * 2.0 * value
+    grad + self.lambda * value
   }
 }
 
@@ -59,5 +59,3 @@ impl L1L2 {
     }
   }
 }
-
-

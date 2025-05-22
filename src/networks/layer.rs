@@ -68,10 +68,7 @@ impl Layer for AffineLayer {
       .unwrap();
     let dy = grad.view().into_dimensionality::<Ix2>().unwrap();
     self.weight.grads = match &self.weight_reg {
-      Some(reg) => reg.apply(
-        x.t().dot(&dy).into_dyn(),
-        self.weight.value.clone().into_dyn(),
-      ),
+      Some(reg) => reg.apply(x.t().dot(&dy).into_dyn(), w.to_owned().into_dyn()),
       _ => x.t().dot(&dy).into_dyn(),
     };
     self.bias.grads = dy.sum_axis(Axis(0)).into_dyn();
@@ -178,10 +175,13 @@ pub struct BatchNorm {
   var: Array<f64, Ix1>,
   z_cache: Option<Array<f64, Ix2>>,
   training: bool,
+  running_mean: Array<f64, Ix1>,
+  running_var: Array<f64, Ix1>,
+  momentum: f64,
 }
 
 impl BatchNorm {
-  pub fn new<O, P>(input_dim: usize, weight_init: &O, bias_init: &P) -> Self
+  pub fn new<O, P>(input_dim: usize, momentum: f64, weight_init: &O, bias_init: &P) -> Self
   where
     O: Initializer,
     P: Initializer,
@@ -197,6 +197,9 @@ impl BatchNorm {
       var,
       z_cache: None,
       training: true,
+      running_mean: Array::ones(input_dim),
+      running_var: Array::ones(input_dim),
+      momentum,
     }
   }
 }
@@ -204,8 +207,15 @@ impl BatchNorm {
 impl Layer for BatchNorm {
   fn forward(&mut self, input: ArrayD<f64>) -> ArrayD<f64> {
     let x = input.view().into_dimensionality::<Ix2>().unwrap();
-    let mean = x.mean_axis(Axis(0)).unwrap();
-    let var = x.var_axis(Axis(0), 0.0);
+    let mut mean = x.mean_axis(Axis(0)).unwrap();
+    let mut var = x.var_axis(Axis(0), 0.0);
+    if self.training {
+      self.running_mean = &self.running_mean * self.momentum + &mean * (1.0 - self.momentum);
+      self.running_var = &self.running_var * self.momentum + &var * (1.0 - self.momentum);
+    } else {
+      mean = self.running_mean.clone();
+      var = self.running_var.clone();
+    }
     let std = var.mapv(|x| x.max(1e-15).sqrt());
     let z = (x.to_owned() - mean.broadcast((x.shape()[0], mean.shape()[0])).unwrap()) / &std;
     let y = &z
@@ -250,7 +260,9 @@ impl Layer for BatchNorm {
   fn params_mut(&mut self) -> Vec<&mut LearnableParameter> {
     vec![&mut self.weight, &mut self.bias]
   }
-  fn set_training(&mut self, _: bool) {}
+  fn set_training(&mut self, training: bool) {
+    self.training = training;
+  }
 }
 
 pub struct Dropout {
