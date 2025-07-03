@@ -47,21 +47,16 @@ impl AffineLayer {
 
 impl Layer for AffineLayer {
   fn forward(&mut self, input: ArrayD<f64>) -> ArrayD<f64> {
-    let x = input
-      .view()
-      .into_dimensionality::<Ix2>()
-      .unwrap()
-      .to_owned();
+    let x = input.view().into_dimensionality::<Ix2>().unwrap();
     self.input_cache = Some(x.to_owned());
     let w = self
       .weight
       .value
       .view()
       .into_dimensionality::<Ix2>()
-      .unwrap()
-      .to_owned();
+      .unwrap();
     let b = self.bias.value.view().into_dimensionality::<Ix1>().unwrap();
-    (matmul(x.clone(), w) + b.broadcast((x.shape()[0], b.len())).unwrap()).into_dyn()
+    (matmul(x.to_owned(), w.to_owned()) + b.broadcast((x.shape()[0], b.len())).unwrap()).into_dyn()
   }
 
   fn backward(&mut self, grad: ArrayD<f64>) -> ArrayD<f64> {
@@ -73,10 +68,12 @@ impl Layer for AffineLayer {
       .into_dimensionality::<Ix2>()
       .unwrap();
     let dy = grad.view().into_dimensionality::<Ix2>().unwrap();
-    let temp = matmul(x.t().to_owned(), dy.to_owned()).into_dyn();
     self.weight.grads = match &self.weight_reg {
-      Some(reg) => reg.apply(temp, w.to_owned().into_dyn()),
-      _ => temp,
+      Some(reg) => reg.apply(
+        matmul(x.t().to_owned(), dy.to_owned()).into_dyn(),
+        w.to_owned().into_dyn(),
+      ),
+      _ => matmul(x.t().to_owned(), dy.to_owned()).into_dyn(),
     };
     self.bias.grads = dy.sum_axis(Axis(0)).into_dyn();
     matmul(dy.to_owned(), w.t().to_owned()).into_dyn()
@@ -161,8 +158,8 @@ impl Layer for Softmax {
     {
       let y_vec = y.insert_axis(Axis(0));
       let dyi_vec = dyi.insert_axis(Axis(0));
-      let temp = Array2::from_diag(&y) - y_vec.t().dot(&y_vec);
-      let dot_result = dyi_vec.dot(&temp);
+      let temp = Array2::from_diag(&y) - matmul(y_vec.t().to_owned(), y_vec.to_owned());
+      let dot_result = matmul(dyi_vec.to_owned(), temp.to_owned());
       let row = &dot_result.row(0);
       out_row.assign(&row);
     }

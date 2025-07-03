@@ -1,4 +1,5 @@
 mod accuracies;
+mod clarray;
 mod losses;
 mod models;
 mod networks;
@@ -9,6 +10,8 @@ mod utils;
 #[cfg(test)]
 mod tests {
   use crate::accuracies::{Accuracy, OnehotArgmaxAccuracy};
+  use crate::clarray::env::{GPUEnv, env};
+  use crate::clarray::tensor::Matrix;
   use crate::losses::{CrossEntropyLoss, LossFunction};
   use crate::models::BaseModel;
   use crate::networks::layer::{AffineLayer, BatchNorm, Dropout, Layer, ReLU, Softmax};
@@ -22,8 +25,62 @@ mod tests {
       batch::{create_batches, one_hot_encode},
     },
   };
-  use ndarray::{ArrayD, IxDyn};
+  use ndarray::{Array2, ArrayD, IxDyn};
+  use ocl::{Device, Platform};
   use utils::load_csv::load_csv_to_ndarray;
+
+  #[test]
+  fn list_devices() -> () {
+    // 利用可能なプラットフォームを取得
+    let platforms = Platform::list();
+    for platform in platforms {
+      println!("Platform: {}", platform.name().unwrap());
+
+      // プラットフォームに関連するデバイスを取得
+      let devices = Device::list_all(&platform).unwrap();
+      for device in devices {
+        // デバイスのタイプを取得
+        let device_type = device.info(ocl::enums::DeviceInfo::Type).unwrap();
+        let device_type_str = match device_type.to_string().as_str() {
+          "CPU" => "CPU",
+          "GPU" => "GPU",
+          "Accelerator" => "Accelerator",
+          "Custom" => "Custom",
+          "All" => "All",
+          _ => "Unknown",
+        };
+        println!("\tDevice: {} ({})", device.name().unwrap(), device_type_str);
+      }
+    }
+  }
+  #[test]
+  fn gpu_gemm() -> Result<(), Box<dyn std::error::Error>> {
+    let a = Matrix::from_vec([3, 2], vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0])?.to_gpu()?;
+    println!("Matrix A: {:?}", a.to_cpu()?.data);
+
+    let b = (&a + 1.0)?;
+    println!("Matrix A + 1: {:?}", b.to_cpu()?.data);
+
+    let b = (&a - 12.0)?;
+    println!("Matrix A - 12: {:?}", b.to_cpu()?.data);
+
+    let b = (5.0f64 * &a)?;
+    println!("5 * Matrix A: {:?}", b.to_cpu()?.data);
+
+    let b = (1.0f64 / &a)?;
+    println!("1 / Matrix A: {:?}", b.to_cpu()?.data);
+
+    let c = Matrix::from_vec([3, 2], vec![6.0, 5.0, 4.0, 3.0, 2.0, 1.0])?.to_gpu()?;
+    println!("Matrix C: {:?}", c.to_cpu()?.data);
+    println!("Hadmard product A * C: {:?}", (&a * &c)?.to_cpu()?.data);
+
+    for (i, row_mat) in a.row_iter().enumerate() {
+      println!("Row: {:?}", row_mat.to_cpu()?.data);
+      row_mat.write(&(&row_mat + (i as f64))?)?;
+    }
+    println!("Matrix A after row-wise increment: {:?}", a.to_cpu()?.data);
+    Ok(())
+  }
 
   #[test]
   fn it_works() -> Result<(), Box<dyn std::error::Error>> {
@@ -50,7 +107,7 @@ mod tests {
       Box::new(Adam::new(0.01, 0.9, 0.999)),
       Box::new(OnehotArgmaxAccuracy::new()),
     );
-    let mut train_data = create_batches(&mnist, 0, 2048);
+    let mut train_data = create_batches(&mnist, 0, 10000);
     for (x_train, y_train) in train_data.iter_mut() {
       *y_train = one_hot_encode(&y_train, 10);
       *x_train = &*x_train / 255.0;
@@ -87,11 +144,15 @@ mod tests {
   }
 
   use csv::{Error, Writer};
+  use std::any::Any;
   use std::collections::HashMap;
+  use std::env;
   use std::io::{self, Write};
+  use std::sync::Arc;
 
   #[test]
   fn benchmark_optimizers() -> Result<(), Box<dyn std::error::Error>> {
+    println!("Benchmarking optimizers on MNIST dataset...");
     // MNISTデータの読み込み
     let mnist = load_csv_to_ndarray("data/mnist_train.csv", true).unwrap();
     // オプティマイザの設定
