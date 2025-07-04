@@ -1,9 +1,8 @@
 use ndarray::{Array, Array2, ArrayD, Axis, Ix1, Ix2};
 use ndarray_rand::{RandomExt, rand};
 
-use crate::{
-  opencl::gemm::matmul,
-  params::{initializer::Initializer, param::LearnableParameter, regularizer::Regularizer},
+use crate::params::{
+  initializer::Initializer, param::LearnableParameter, regularizer::Regularizer,
 };
 
 pub trait Layer {
@@ -47,21 +46,16 @@ impl AffineLayer {
 
 impl Layer for AffineLayer {
   fn forward(&mut self, input: ArrayD<f64>) -> ArrayD<f64> {
-    let x = input
-      .view()
-      .into_dimensionality::<Ix2>()
-      .unwrap()
-      .to_owned();
+    let x = input.view().into_dimensionality::<Ix2>().unwrap();
     self.input_cache = Some(x.to_owned());
     let w = self
       .weight
       .value
       .view()
       .into_dimensionality::<Ix2>()
-      .unwrap()
-      .to_owned();
+      .unwrap();
     let b = self.bias.value.view().into_dimensionality::<Ix1>().unwrap();
-    (matmul(x.clone(), w) + b.broadcast((x.shape()[0], b.len())).unwrap()).into_dyn()
+    (x.dot(&w) + b.broadcast((x.shape()[0], b.len())).unwrap()).into_dyn()
   }
 
   fn backward(&mut self, grad: ArrayD<f64>) -> ArrayD<f64> {
@@ -73,13 +67,12 @@ impl Layer for AffineLayer {
       .into_dimensionality::<Ix2>()
       .unwrap();
     let dy = grad.view().into_dimensionality::<Ix2>().unwrap();
-    let temp = matmul(x.t().to_owned(), dy.to_owned()).into_dyn();
     self.weight.grads = match &self.weight_reg {
-      Some(reg) => reg.apply(temp, w.to_owned().into_dyn()),
-      _ => temp,
+      Some(reg) => reg.apply(x.t().dot(&dy).into_dyn(), w.to_owned().into_dyn()),
+      _ => x.t().dot(&dy).into_dyn(),
     };
     self.bias.grads = dy.sum_axis(Axis(0)).into_dyn();
-    matmul(dy.to_owned(), w.t().to_owned()).into_dyn()
+    dy.dot(&w.t()).into_dyn()
   }
 
   fn params_mut(&mut self) -> Vec<&mut LearnableParameter> {
