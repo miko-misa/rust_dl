@@ -54,7 +54,7 @@ mod tests {
     }
   }
   #[test]
-  fn gpu_gemm() -> Result<(), Box<dyn std::error::Error>> {
+  fn clarray_test() -> Result<(), Box<dyn std::error::Error>> {
     let a = Matrix::from_vec([3, 2], vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0])?.to_gpu()?;
     println!("Matrix A: {:?}", a.to_cpu()?.data);
 
@@ -76,9 +76,66 @@ mod tests {
 
     for (i, row_mat) in a.row_iter().enumerate() {
       println!("Row: {:?}", row_mat.to_cpu()?.data);
-      row_mat.write(&(&row_mat + (i as f64))?)?;
+      let row = (&row_mat + ((i + 1) as f64))?;
+      println!("Row after increment: {:?}", row.to_cpu()?.data);
+      row_mat.write(&row)?;
     }
     println!("Matrix A after row-wise increment: {:?}", a.to_cpu()?.data);
+    let a = Matrix::from_vec([2, 3], vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0])?.to_gpu()?;
+    let b = a.mapv(|x| x * 2.0)?;
+    println!("Matrix A after mapv: {:?}", b.to_cpu()?.data);
+    let b = a.clip(2.0, f64::MAX)?;
+    println!("Matrix A after clipping: {:?}", b.to_cpu()?.data);
+    Ok(())
+  }
+
+  #[test]
+  fn ndarray_gemm_benchmark() -> Result<(), Box<dyn std::error::Error>> {
+    // 100回行い、平均時間を計測
+    let mut total_time = 0.0;
+    for _ in 0..100 {
+      let a =
+        Array2::<f64>::from_shape_vec((1000, 1000), (0..1000000).map(|x| x as f64).collect())?;
+      let b =
+        Array2::<f64>::from_shape_vec((1000, 1000), (0..1000000).map(|x| x as f64).collect())?;
+      let start_time = std::time::Instant::now();
+      let _c = a.dot(&b);
+      let elapsed_time = start_time.elapsed().as_secs_f64();
+      total_time += elapsed_time;
+    }
+    let average_time = total_time / 100.0;
+    println!(
+      "Average time for 1000x1000 matrix multiplication: {:.6} seconds",
+      average_time
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn clarray_gemm_benchmark() -> Result<(), Box<dyn std::error::Error>> {
+    // 100回行い、平均時間を計測
+    let mut total_time = 0.0;
+    for _ in 0..100 {
+      let a = Matrix::from_vec(
+        [1000, 1000],
+        (0..1000000).map(|x| x as f64).collect::<Vec<f64>>(),
+      )?
+      .to_gpu()?;
+      let b = Matrix::from_vec(
+        [1000, 1000],
+        (0..1000000).map(|x| x as f64).collect::<Vec<f64>>(),
+      )?
+      .to_gpu()?;
+      let start_time = std::time::Instant::now();
+      let _c = a.dot(&b)?;
+      let elapsed_time = start_time.elapsed().as_secs_f64();
+      total_time += elapsed_time;
+    }
+    let average_time = total_time / 100.0;
+    println!(
+      "Average time for 1000x1000 matrix multiplication: {:.6} seconds",
+      average_time
+    );
     Ok(())
   }
 
@@ -147,6 +204,7 @@ mod tests {
   use std::any::Any;
   use std::collections::HashMap;
   use std::env;
+  use std::f64::INFINITY;
   use std::io::{self, Write};
   use std::sync::Arc;
 

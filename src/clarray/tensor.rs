@@ -6,7 +6,7 @@ use ocl::{Buffer, Device, Kernel, OclPrm, core::OclNum, flags};
 use crate::clarray::{
   env::{GPUEnv, env},
   error::Error,
-  kernel::{clang_type_name, repeak_source, write_source},
+  kernel::{clang_type_name, matrix::repeak_source},
 };
 
 pub struct Tensor<T, D>
@@ -74,6 +74,88 @@ where
 pub type GPUVector<T> = GPUTensor<T, [usize; 1]>;
 pub type GPUMatrix<T> = GPUTensor<T, [usize; 2]>;
 
+impl<T> GPUVector<T>
+where
+  T: OclPrm + Num + Copy + Debug + Default + OclNum,
+{
+  pub fn new(shape: [usize; 1], env: Arc<GPUEnv>) -> Result<Self, Error> {
+    if shape.len() != 1 {
+      return Err(Error::MismatchedShape {
+        expected: vec![1],
+        found: vec![shape.len()],
+      });
+    }
+
+    let buffer = Buffer::<T>::builder()
+      .queue(env.queue.clone())
+      .len(shape[0])
+      .build()?;
+
+    Ok(GPUVector {
+      buffer,
+      shape,
+      strides: [1],
+      offset: [0],
+      env,
+    })
+  }
+
+  pub fn len(&self) -> usize {
+    self.shape[0]
+  }
+
+  pub fn to_cpu(&self) -> Result<Vector<T>, Error> {
+    let mut data = vec![T::default(); self.len()];
+    self
+      .buffer
+      .read(&mut data)
+      .enq()
+      .map_err(|e| Error::OclError(e))?;
+    Ok(Vector {
+      shape: [self.len()],
+      data,
+      offset: [0],
+    })
+  }
+
+  pub fn write(&self, data: &GPUVector<T>) -> Result<(), Error> {
+    if data.shape != self.shape {
+      return Err(Error::MismatchedShape {
+        expected: vec![self.shape[0]],
+        found: vec![data.shape[0]],
+      });
+    }
+
+    let type_suffix = std::any::type_name::<T>();
+    let type_name = clang_type_name(&type_suffix);
+    let kernel_name = format!("write_vec_{}", type_suffix);
+
+    let program = self.env.get_or_compile_program(&kernel_name, || {
+      crate::clarray::kernel::vector::write_source(&type_name, &type_suffix)
+    })?;
+
+    let kernel = Kernel::builder()
+      .program(&program)
+      .name(&kernel_name)
+      .queue(self.env.queue.clone())
+      .global_work_size(self.shape)
+      .arg(&data.buffer)
+      .arg(data.strides[0] as i32)
+      .arg(data.offset[0] as i32)
+      .arg(&self.buffer)
+      .arg(self.strides[0] as i32)
+      .arg(self.offset[0] as i32)
+      .arg(self.len() as i32)
+      .build()?;
+
+    unsafe {
+      kernel.enq()?;
+    }
+
+    Ok(())
+  }
+}
+
 impl<T> GPUMatrix<T>
 where
   T: OclPrm + Num + Copy + Debug + Default + OclNum,
@@ -136,7 +218,7 @@ where
 
       let type_suffix = std::any::type_name::<T>();
       let type_name = clang_type_name(type_suffix);
-      let kernel_key = format!("repeak_{}", type_suffix);
+      let kernel_key = format!("repeak_mat_{}", type_suffix);
       let program = self
         .env
         .get_or_compile_program(&kernel_key, || repeak_source(&type_name, &type_suffix))?;
@@ -195,11 +277,11 @@ where
 
     let type_suffix = std::any::type_name::<T>();
     let type_name = clang_type_name(&type_suffix);
-    let kernel_name = format!("write_{}", type_suffix);
+    let kernel_name = format!("write_mat_{}", type_suffix);
 
-    let program = self
-      .env
-      .get_or_compile_program(&kernel_name, || write_source(&type_name, &type_suffix))?;
+    let program = self.env.get_or_compile_program(&kernel_name, || {
+      crate::clarray::kernel::matrix::write_source(&type_name, &type_suffix)
+    })?;
 
     let kernel = Kernel::builder()
       .program(&program)
@@ -227,12 +309,13 @@ where
     Ok(())
   }
 
-  pub fn row_iter(&self) -> impl Iterator<Item = GPUMatrix<T>> + '_ {
-    (0..self.rows()).map(move |i| GPUMatrix {
-      buffer: self.buffer.clone(),
-      shape: [1, self.cols()],
-      strides: [self.strides[0], self.strides[1]],
-      offset: [i, 0],
+  pub fn row_iter(&self) -> impl Iterator<Item = GPUVector<T>> + '_ {
+    let contiguous_self = self.contiguous().unwrap();
+    (0..contiguous_self.rows()).map(move |i| GPUVector {
+      buffer: contiguous_self.buffer.clone(),
+      shape: [contiguous_self.cols()],
+      strides: [contiguous_self.strides[1]],
+      offset: [i * contiguous_self.strides[0]],
       env: self.env.clone(),
     })
   }
