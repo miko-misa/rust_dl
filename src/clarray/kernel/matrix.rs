@@ -228,3 +228,66 @@ pub fn clip_source(type_name: &str, type_suffix: &str) -> String {
     type_name = type_name
   )
 }
+
+pub fn row_sum_source(type_name: &str, type_suffix: &str) -> String {
+  format!(
+    r#"
+    __kernel void row_sum_mat_{type_suffix}(
+      __global const {type_name}* input,
+      int input_stride_0, int input_stride_1,
+      int input_offset_0, int input_offset_1,
+      __global {type_name}* output,
+      int output_stride,
+      int output_offset,
+      int rows,
+    ) {{
+
+      int row = get_global_id(0);
+      if (row >= rows) return;
+
+      {type_name} sum = 0.0;
+      for (int col = 0; col < cols; ++col) {{
+        int index = (row + input_offset_0) * input_stride_0 + (col + input_offset_1) * input_stride_1;
+        sum += input[index];
+      }}
+
+      output[(row + output_offset) * output_stride] = sum;
+    }}
+  "#,
+    type_suffix = type_suffix,
+    type_name = type_name
+  )
+}
+
+pub fn diag_source(type_name: &str, type_suffix: &str) -> String {
+  format!(
+    r#"
+    __kernel void diag_mat_{type_suffix}(
+      __global const {type_name}* input,
+      int input_stride,
+      int input_offset,
+      __global {type_name}* output,
+      int output_stride_0, int output_stride_1,
+      int output_offset_0, int output_offset_1,
+      int rows, int cols
+    ) {{
+
+      int row = get_global_id(0);
+      if (row >= rows) return;
+
+      int output_index = (row + output_offset_0) * output_stride_0 + (col + output_offset_1) * output_stride_1;
+
+      for (int col = 0; col < cols; ++col) {{
+        if (row == col) {{
+          int input_index = (row + input_offset) * input_stride;
+          output[output_index] = input[input_index];
+        }} else {{
+          output[output_index] = 0.0;
+        }}
+      }}
+    }}
+  "#,
+    type_suffix = type_suffix,
+    type_name = type_name
+  )
+}

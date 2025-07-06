@@ -11,7 +11,7 @@ use crate::clarray::{
     },
     op_to_suffix,
   },
-  tensor::GPUMatrix,
+  tensor::{GPUMatrix, OclComputeNum},
 };
 
 fn elementwise_op<T>(
@@ -20,7 +20,7 @@ fn elementwise_op<T>(
   op: &str,
 ) -> Result<GPUMatrix<T>, Error>
 where
-  T: OclPrm + Num + Copy + Default + OclNum,
+  T: OclComputeNum,
 {
   if lhs.shape != rhs.shape {
     return Err(crate::clarray::error::Error::MismatchedShape {
@@ -29,7 +29,7 @@ where
     });
   }
 
-  let output = GPUMatrix::new(lhs.shape, lhs.env.clone())?;
+  let output = GPUMatrix::zeros(lhs.shape, lhs.env.clone())?;
 
   let type_suffix = std::any::type_name::<T>();
   let type_name = clang_type_name(&type_suffix);
@@ -71,9 +71,9 @@ where
 
 fn elementwise_op_l<T>(lhs: &T, rhs: &GPUMatrix<T>, op: &str) -> Result<GPUMatrix<T>, Error>
 where
-  T: OclPrm + Num + Copy + Default + OclNum,
+  T: OclComputeNum,
 {
-  let output = GPUMatrix::new(rhs.shape, rhs.env.clone())?;
+  let output = GPUMatrix::zeros(rhs.shape, rhs.env.clone())?;
 
   let type_suffix = std::any::type_name::<T>();
   let type_name = clang_type_name(&type_suffix);
@@ -115,9 +115,9 @@ where
 
 fn elementwise_op_r<T>(lhs: &GPUMatrix<T>, rhs: &T, op: &str) -> Result<GPUMatrix<T>, Error>
 where
-  T: OclPrm + Num + Copy + Default + OclNum,
+  T: OclComputeNum,
 {
-  let output = GPUMatrix::new(lhs.shape, lhs.env.clone())?;
+  let output = GPUMatrix::zeros(lhs.shape, lhs.env.clone())?;
 
   let type_suffix = std::any::type_name::<T>();
   let type_name = clang_type_name(&type_suffix);
@@ -161,7 +161,7 @@ macro_rules! impl_matrix_op {
   ($trait:ident, $method:ident, $func:ident, $op_symbol:expr) => {
     impl<'a, 'b, T> std::ops::$trait<&'b GPUMatrix<T>> for &'a GPUMatrix<T>
     where
-      T: OclPrm + Num + Copy + Default + OclNum,
+      T: OclComputeNum,
     {
       type Output = Result<GPUMatrix<T>, Error>;
       fn $method(self, rhs: &'b GPUMatrix<T>) -> Self::Output {
@@ -181,7 +181,7 @@ macro_rules! impl_matrix_op_r {
   ($trait:ident, $method:ident, $func:ident, $op_symbol:expr) => {
     impl<'a, T> std::ops::$trait<T> for &'a GPUMatrix<T>
     where
-      T: OclPrm + Num + Copy + Default + OclNum,
+      T: OclComputeNum,
     {
       type Output = Result<GPUMatrix<T>, Error>;
       fn $method(self, rhs: T) -> Self::Output {
@@ -197,30 +197,32 @@ impl_matrix_op_r!(Div, div, elementwise_op_r, "/");
 impl_matrix_op_r!(Rem, rem, elementwise_op_r, "%");
 
 macro_rules! impl_scalar_left {
-  ($ty:ty, $trait:ident, $method:ident, $func:ident, $op_symbol:expr) => {
-    impl<'b> std::ops::$trait<&'b GPUMatrix<$ty>> for $ty {
-      type Output = Result<GPUMatrix<$ty>, Error>;
-      fn $method(self, rhs: &'b GPUMatrix<$ty>) -> Self::Output {
+  ($trait:ident, $method:ident, $func:ident, $op_symbol:expr) => {
+    impl<'b> std::ops::$trait<&'b GPUMatrix<f32>> for f32 {
+      type Output = Result<GPUMatrix<f32>, Error>;
+      fn $method(self, rhs: &'b GPUMatrix<f32>) -> Self::Output {
+        $func(&self, rhs, $op_symbol)
+      }
+    }
+
+    impl<'b> std::ops::$trait<&'b GPUMatrix<f64>> for f64 {
+      type Output = Result<GPUMatrix<f64>, Error>;
+      fn $method(self, rhs: &'b GPUMatrix<f64>) -> Self::Output {
         $func(&self, rhs, $op_symbol)
       }
     }
   };
 }
 
-impl_scalar_left!(f32, Add, add, elementwise_op_l, "+");
-impl_scalar_left!(f64, Add, add, elementwise_op_l, "+");
-impl_scalar_left!(f32, Sub, sub, elementwise_op_l, "-");
-impl_scalar_left!(f64, Sub, sub, elementwise_op_l, "-");
-impl_scalar_left!(f32, Mul, mul, elementwise_op_l, "*");
-impl_scalar_left!(f64, Mul, mul, elementwise_op_l, "*");
-impl_scalar_left!(f32, Div, div, elementwise_op_l, "/");
-impl_scalar_left!(f64, Div, div, elementwise_op_l, "/");
-impl_scalar_left!(f32, Rem, rem, elementwise_op_l, "%");
-impl_scalar_left!(f64, Rem, rem, elementwise_op_l, "%");
+impl_scalar_left!(Add, add, elementwise_op_l, "+");
+impl_scalar_left!(Sub, sub, elementwise_op_l, "-");
+impl_scalar_left!(Mul, mul, elementwise_op_l, "*");
+impl_scalar_left!(Div, div, elementwise_op_l, "/");
+impl_scalar_left!(Rem, rem, elementwise_op_l, "%");
 
 impl<T> GPUMatrix<T>
 where
-  T: OclPrm + Num + Copy + Default + OclNum + Bounded,
+  T: OclComputeNum,
 {
   pub fn dot(&self, rhs: &GPUMatrix<T>) -> Result<GPUMatrix<T>, Error> {
     if self.shape[1] != rhs.shape[0] {
@@ -233,7 +235,7 @@ where
     let k = self.shape[1];
 
     let output_shape = [self.shape[0], rhs.shape[1]];
-    let output = GPUMatrix::new(output_shape, self.env.clone())?;
+    let output = GPUMatrix::zeros(output_shape, self.env.clone())?;
 
     let type_suffix = std::any::type_name::<T>();
     let type_name = clang_type_name(&type_suffix);
@@ -294,7 +296,7 @@ where
   }
 
   pub fn clip(&self, min: T, max: T) -> Result<GPUMatrix<T>, Error> {
-    let output = GPUMatrix::new(self.shape.clone(), self.env.clone())?;
+    let output = GPUMatrix::zeros(self.shape.clone(), self.env.clone())?;
     let type_suffix = std::any::type_name::<T>();
     let type_name = clang_type_name(&type_suffix);
     let kernel_name = format!("clip_mat_{}", type_suffix);

@@ -1,10 +1,12 @@
 mod clarray;
+mod networks;
+mod optimizers;
+mod params;
 
 #[cfg(test)]
 mod tests {
   use crate::clarray::env::{GPUEnv, env};
   use crate::clarray::tensor::Matrix;
-  use ndarray::{Array2, ArrayD, IxDyn};
   use ocl::{Device, Platform};
 
   #[test]
@@ -64,28 +66,6 @@ mod tests {
     println!("Matrix A after mapv: {:?}", b.to_cpu()?.data);
     let b = a.clip(2.0, f64::MAX)?;
     println!("Matrix A after clipping: {:?}", b.to_cpu()?.data);
-    Ok(())
-  }
-
-  #[test]
-  fn ndarray_gemm_benchmark() -> Result<(), Box<dyn std::error::Error>> {
-    // 100回行い、平均時間を計測
-    let mut total_time = 0.0;
-    for _ in 0..100 {
-      let a =
-        Array2::<f64>::from_shape_vec((1000, 1000), (0..1000000).map(|x| x as f64).collect())?;
-      let b =
-        Array2::<f64>::from_shape_vec((1000, 1000), (0..1000000).map(|x| x as f64).collect())?;
-      let start_time = std::time::Instant::now();
-      let _c = a.dot(&b);
-      let elapsed_time = start_time.elapsed().as_secs_f64();
-      total_time += elapsed_time;
-    }
-    let average_time = total_time / 100.0;
-    println!(
-      "Average time for 1000x1000 matrix multiplication: {:.6} seconds",
-      average_time
-    );
     Ok(())
   }
 

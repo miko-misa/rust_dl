@@ -1,17 +1,28 @@
-use std::{fmt::Debug, sync::Arc};
+use std::{any::Any, f32::consts, fmt::Debug, sync::Arc};
 
-use num_traits::Num;
+use num_traits::{Bounded, Float, FromPrimitive, Num, ToPrimitive};
 use ocl::{Buffer, Device, Kernel, OclPrm, core::OclNum, flags};
 
 use crate::clarray::{
   env::{GPUEnv, env},
   error::Error,
-  kernel::{clang_type_name, matrix::repeak_source},
+  kernel::{
+    clang_type_name,
+    matrix::{repeak_source, row_sum_source},
+  },
 };
+
+pub trait OclComputeNum:
+  OclPrm + Num + Copy + Debug + Default + OclNum + FromPrimitive + ToPrimitive + Bounded + Float
+{
+}
+
+impl OclComputeNum for f32 {}
+impl OclComputeNum for f64 {}
 
 pub struct Tensor<T, D>
 where
-  T: OclPrm + Num + Copy + Debug + Default + OclNum,
+  T: OclComputeNum,
   D: AsRef<[usize]> + AsMut<[usize]> + Debug + Clone,
 {
   pub shape: D,
@@ -24,7 +35,7 @@ pub type Matrix<T> = Tensor<T, [usize; 2]>;
 
 impl<T> Matrix<T>
 where
-  T: OclPrm + Num + Copy + Debug + Default + OclNum,
+  T: OclComputeNum,
 {
   pub fn from_vec(shape: [usize; 2], data: Vec<T>) -> Result<Self, Error> {
     if shape[0] * shape[1] != data.len() {
@@ -61,7 +72,7 @@ where
 #[derive(Clone)]
 pub struct GPUTensor<T, D>
 where
-  T: OclPrm + Num + Copy + Debug + Default + OclNum,
+  T: OclComputeNum,
   D: AsRef<[usize]> + AsMut<[usize]> + Debug + Clone,
 {
   pub(crate) buffer: Buffer<T>,
@@ -71,39 +82,101 @@ where
   pub(crate) env: Arc<GPUEnv>,
 }
 
+pub trait DynamicGPUTensor<T>
+where
+  T: OclComputeNum,
+{
+  fn as_any(&self) -> &dyn Any;
+  fn as_any_mut(&mut self) -> &mut dyn Any;
+  fn rank(&self) -> usize;
+  fn print_info(&self);
+}
+impl<T, D> DynamicGPUTensor<T> for GPUTensor<T, D>
+where
+  T: OclComputeNum,
+  D: AsRef<[usize]> + AsMut<[usize]> + Debug + Clone + 'static,
+{
+  fn as_any(&self) -> &dyn Any {
+    self
+  }
+  fn as_any_mut(&mut self) -> &mut dyn Any {
+    self
+  }
+  fn rank(&self) -> usize {
+    self.shape.as_ref().len()
+  }
+
+  fn print_info(&self) {
+    println!(
+      "GPUTensor<Rank: {}, Shape: {:?}, Type: {}>",
+      self.rank(),
+      self.shape.as_ref(),
+      std::any::type_name::<T>()
+    );
+  }
+}
+
 pub type GPUVector<T> = GPUTensor<T, [usize; 1]>;
 pub type GPUMatrix<T> = GPUTensor<T, [usize; 2]>;
 
-impl<T> GPUVector<T>
+impl<T, D> GPUTensor<T, D>
 where
-  T: OclPrm + Num + Copy + Debug + Default + OclNum,
+  T: OclComputeNum,
+  D: AsRef<[usize]> + AsMut<[usize]> + Debug + Clone,
 {
-  pub fn new(shape: [usize; 1], env: Arc<GPUEnv>) -> Result<Self, Error> {
-    if shape.len() != 1 {
+  pub fn zeros(shape: D, env: Arc<GPUEnv>) -> Result<Self, Error> {
+    Self::from_vec(
+      shape.clone(),
+      vec![T::zero(); shape.as_ref().iter().product()],
+      env,
+    )
+  }
+
+  pub fn from_vec(shape: D, data: Vec<T>, env: Arc<GPUEnv>) -> Result<Self, Error> {
+    if shape.as_ref().iter().product::<usize>() != data.len() {
       return Err(Error::MismatchedShape {
-        expected: vec![1],
-        found: vec![shape.len()],
+        expected: shape.as_ref().to_vec(),
+        found: vec![data.len()],
       });
     }
 
     let buffer = Buffer::<T>::builder()
       .queue(env.queue.clone())
-      .len(shape[0])
+      .len(data.len())
+      .copy_host_slice(&data)
       .build()?;
 
-    Ok(GPUVector {
+    let mut stride = shape.clone();
+    for i in 0..stride.as_ref().len() {
+      if i == 0 {
+        stride.as_mut()[i] = 1;
+      } else {
+        stride.as_mut()[i] = stride.as_ref()[i - 1] * shape.as_ref()[i];
+      }
+    }
+
+    Ok(GPUTensor {
       buffer,
-      shape,
-      strides: [1],
-      offset: [0],
+      shape: shape.clone(),
+      strides: stride,
+      offset: {
+        let mut offset = shape.clone();
+        offset.as_mut().iter_mut().for_each(|x| *x = 0);
+        offset
+      },
       env,
     })
   }
 
   pub fn len(&self) -> usize {
-    self.shape[0]
+    self.shape.as_ref().iter().product()
   }
+}
 
+impl<T> GPUVector<T>
+where
+  T: OclComputeNum,
+{
   pub fn to_cpu(&self) -> Result<Vector<T>, Error> {
     let mut data = vec![T::default(); self.len()];
     self
@@ -158,39 +231,14 @@ where
 
 impl<T> GPUMatrix<T>
 where
-  T: OclPrm + Num + Copy + Debug + Default + OclNum,
+  T: OclComputeNum,
 {
-  pub fn new(shape: [usize; 2], env: Arc<GPUEnv>) -> Result<Self, Error> {
-    if shape.len() != 2 {
-      return Err(Error::MismatchedShape {
-        expected: vec![2],
-        found: vec![shape.len()],
-      });
-    }
-
-    let buffer = Buffer::<T>::builder()
-      .queue(env.queue.clone())
-      .len(shape[0] * shape[1])
-      .build()?;
-
-    Ok(GPUMatrix {
-      buffer,
-      shape,
-      strides: [shape[1], 1],
-      offset: [0, 0],
-      env,
-    })
-  }
   pub fn rows(&self) -> usize {
     self.shape[0]
   }
 
   pub fn cols(&self) -> usize {
     self.shape[1]
-  }
-
-  pub fn len(&self) -> usize {
-    self.shape.iter().product()
   }
 
   pub fn t(&self) -> GPUMatrix<T> {
@@ -318,5 +366,70 @@ where
       offset: [i * contiguous_self.strides[0]],
       env: self.env.clone(),
     })
+  }
+
+  pub fn row_sum(&self) -> Result<GPUVector<T>, Error> {
+    let contiguous_self = self.contiguous()?;
+    let output = GPUVector::zeros([contiguous_self.rows()], self.env.clone())?;
+
+    let type_suffix = std::any::type_name::<T>();
+    let type_name = clang_type_name(&type_suffix);
+    let kernel_name = format!("row_sum_mat_{}", type_suffix);
+
+    let program = self
+      .env
+      .get_or_compile_program(&kernel_name, || row_sum_source(&type_name, &type_suffix))?;
+
+    let kernel = Kernel::builder()
+      .program(&program)
+      .name(&kernel_name)
+      .queue(self.env.queue.clone())
+      .global_work_size([contiguous_self.rows()])
+      .arg(&contiguous_self.buffer)
+      .arg(contiguous_self.strides[0] as i32)
+      .arg(contiguous_self.strides[1] as i32)
+      .arg(contiguous_self.offset[0] as i32)
+      .arg(contiguous_self.offset[1] as i32)
+      .arg(&output.buffer)
+      .arg(output.strides[0] as i32)
+      .arg(output.offset[0] as i32)
+      .arg(contiguous_self.cols() as i32)
+      .build()?;
+
+    unsafe {
+      kernel.enq()?;
+    }
+
+    Ok(output)
+  }
+
+  pub fn from_diag(vec: &GPUVector<T>, env: Arc<GPUEnv>) -> Result<Self, Error> {
+    let output = GPUMatrix::zeros([vec.shape[0], vec.shape[0]], env.clone())?;
+    let type_suffix = std::any::type_name::<T>();
+    let type_name = clang_type_name(&type_suffix);
+    let kernel_name = format!("diag_mat_{}", type_suffix);
+    let program = env.get_or_compile_program(&kernel_name, || {
+      crate::clarray::kernel::matrix::diag_source(&type_name, &type_suffix)
+    })?;
+    let kernel = Kernel::builder()
+      .program(&program)
+      .name(&kernel_name)
+      .queue(env.queue.clone())
+      .global_work_size(vec.shape[0])
+      .arg(&vec.buffer)
+      .arg(vec.strides[0] as i32)
+      .arg(vec.offset[0] as i32)
+      .arg(&output.buffer)
+      .arg(output.strides[0] as i32)
+      .arg(output.strides[1] as i32)
+      .arg(output.offset[0] as i32)
+      .arg(output.offset[1] as i32)
+      .arg(vec.shape[0] as i32)
+      .arg(vec.shape[0] as i32)
+      .build()?;
+    unsafe {
+      kernel.enq()?;
+    }
+    Ok(output)
   }
 }
