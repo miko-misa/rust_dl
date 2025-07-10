@@ -239,11 +239,10 @@ pub fn row_sum_source(type_name: &str, type_suffix: &str) -> String {
       __global {type_name}* output,
       int output_stride,
       int output_offset,
-      int rows,
+      int cols
     ) {{
 
       int row = get_global_id(0);
-      if (row >= rows) return;
 
       {type_name} sum = 0.0;
       for (int col = 0; col < cols; ++col) {{
@@ -273,17 +272,16 @@ pub fn diag_source(type_name: &str, type_suffix: &str) -> String {
     ) {{
 
       int row = get_global_id(0);
-      if (row >= rows) return;
+      int col = get_global_id(1);
+      if (row >= rows || col >= cols) return;
 
       int output_index = (row + output_offset_0) * output_stride_0 + (col + output_offset_1) * output_stride_1;
 
-      for (int col = 0; col < cols; ++col) {{
-        if (row == col) {{
-          int input_index = (row + input_offset) * input_stride;
-          output[output_index] = input[input_index];
-        }} else {{
-          output[output_index] = 0.0;
-        }}
+      if (row == col) {{
+        int input_index = (row + input_offset) * input_stride;
+        output[output_index] = input[input_index];
+      }} else {{
+        output[output_index] = 0.0;
       }}
     }}
   "#,

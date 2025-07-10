@@ -147,11 +147,11 @@ where
       .build()?;
 
     let mut stride = shape.clone();
-    for i in 0..stride.as_ref().len() {
-      if i == 0 {
+    for i in (0..shape.as_ref().len()).rev() {
+      if i == shape.as_ref().len() - 1 {
         stride.as_mut()[i] = 1;
       } else {
-        stride.as_mut()[i] = stride.as_ref()[i - 1] * shape.as_ref()[i];
+        stride.as_mut()[i] = stride.as_ref()[i + 1] * shape.as_ref()[i + 1];
       }
     }
 
@@ -200,12 +200,9 @@ where
     }
 
     let type_suffix = std::any::type_name::<T>();
-    let type_name = clang_type_name(&type_suffix);
     let kernel_name = format!("write_vec_{}", type_suffix);
 
-    let program = self.env.get_or_compile_program(&kernel_name, || {
-      crate::clarray::kernel::vector::write_source(&type_name, &type_suffix)
-    })?;
+    let program = self.env.get_or_compile_program(&type_suffix)?;
 
     let kernel = Kernel::builder()
       .program(&program)
@@ -265,11 +262,8 @@ where
         .build()?;
 
       let type_suffix = std::any::type_name::<T>();
-      let type_name = clang_type_name(type_suffix);
       let kernel_key = format!("repeak_mat_{}", type_suffix);
-      let program = self
-        .env
-        .get_or_compile_program(&kernel_key, || repeak_source(&type_name, &type_suffix))?;
+      let program = self.env.get_or_compile_program(&type_suffix)?;
 
       let kernel = Kernel::builder()
         .program(&program)
@@ -282,8 +276,8 @@ where
         .arg(self.offset[0] as i32)
         .arg(self.offset[1] as i32)
         .arg(&output_buffer)
-        .arg(self.rows())
-        .arg(self.cols())
+        .arg(self.rows() as i32)
+        .arg(self.cols() as i32)
         .build()?;
 
       unsafe {
@@ -324,12 +318,9 @@ where
     }
 
     let type_suffix = std::any::type_name::<T>();
-    let type_name = clang_type_name(&type_suffix);
     let kernel_name = format!("write_mat_{}", type_suffix);
 
-    let program = self.env.get_or_compile_program(&kernel_name, || {
-      crate::clarray::kernel::matrix::write_source(&type_name, &type_suffix)
-    })?;
+    let program = self.env.get_or_compile_program(&type_suffix)?;
 
     let kernel = Kernel::builder()
       .program(&program)
@@ -373,12 +364,9 @@ where
     let output = GPUVector::zeros([contiguous_self.rows()], self.env.clone())?;
 
     let type_suffix = std::any::type_name::<T>();
-    let type_name = clang_type_name(&type_suffix);
     let kernel_name = format!("row_sum_mat_{}", type_suffix);
 
-    let program = self
-      .env
-      .get_or_compile_program(&kernel_name, || row_sum_source(&type_name, &type_suffix))?;
+    let program = self.env.get_or_compile_program(&type_suffix)?;
 
     let kernel = Kernel::builder()
       .program(&program)
@@ -406,11 +394,8 @@ where
   pub fn from_diag(vec: &GPUVector<T>, env: Arc<GPUEnv>) -> Result<Self, Error> {
     let output = GPUMatrix::zeros([vec.shape[0], vec.shape[0]], env.clone())?;
     let type_suffix = std::any::type_name::<T>();
-    let type_name = clang_type_name(&type_suffix);
     let kernel_name = format!("diag_mat_{}", type_suffix);
-    let program = env.get_or_compile_program(&kernel_name, || {
-      crate::clarray::kernel::matrix::diag_source(&type_name, &type_suffix)
-    })?;
+    let program = env.get_or_compile_program(&type_suffix)?;
     let kernel = Kernel::builder()
       .program(&program)
       .name(&kernel_name)

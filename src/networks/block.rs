@@ -30,9 +30,9 @@ where
     output
   }
 
-  fn backward(&self, grad: GPUTensor<f64, I>) -> GPUTensor<f64, I> {
+  fn backward(&mut self, grad: GPUTensor<f64, I>) -> GPUTensor<f64, I> {
     let mut output = grad;
-    for layer in self.layers.iter().rev() {
+    for layer in self.layers.iter_mut().rev() {
       output = layer.backward(output);
     }
     output

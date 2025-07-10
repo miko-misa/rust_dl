@@ -31,12 +31,8 @@ where
   let output = GPUVector::zeros(lhs.shape, lhs.env.clone())?;
 
   let type_suffix = std::any::type_name::<T>();
-  let type_name = clang_type_name(&type_suffix);
-
   let kernel_name = format!("elementwise_{}_vec_{}", op_to_suffix(&op), type_suffix);
-  let program = lhs.env.get_or_compile_program(&kernel_name, || {
-    elementwise_op_source(op, &type_name, &type_suffix)
-  })?;
+  let program = lhs.env.get_or_compile_program(&type_suffix)?;
 
   let kernel = Kernel::builder()
     .program(&program)
@@ -68,7 +64,6 @@ where
   let output = GPUVector::zeros(rhs.shape, rhs.env.clone())?;
 
   let type_suffix = std::any::type_name::<T>();
-  let type_name = clang_type_name(&type_suffix);
 
   let kernel_name = format!(
     "elementwise_{}_scalar_l_vec_{}",
@@ -76,15 +71,7 @@ where
     type_suffix
   );
 
-  println!("Kernel name: {}", kernel_name);
-  println!(
-    "Program: {:?}",
-    elementwise_op_scalar_l_source(op, &type_name, &type_suffix)
-  );
-
-  let program = rhs.env.get_or_compile_program(&kernel_name, || {
-    elementwise_op_scalar_l_source(op, &type_name, &type_suffix)
-  })?;
+  let program = rhs.env.get_or_compile_program(&type_suffix)?;
 
   let kernel = Kernel::builder()
     .program(&program)
@@ -114,16 +101,12 @@ where
   let output = GPUVector::zeros(lhs.shape, lhs.env.clone())?;
 
   let type_suffix = std::any::type_name::<T>();
-  let type_name = clang_type_name(&type_suffix);
-
   let kernel_name = format!(
     "elementwise_{}_scalar_r_vec_{}",
     op_to_suffix(&op),
     type_suffix
   );
-  let program = lhs.env.get_or_compile_program(&kernel_name, || {
-    elementwise_op_scalar_r_source(op, &type_name, &type_suffix)
-  })?;
+  let program = lhs.env.get_or_compile_program(&type_suffix)?;
 
   let kernel = Kernel::builder()
     .program(&program)
@@ -217,12 +200,9 @@ where
     let output = GPUMatrix::zeros([rows, self.shape[0]], self.env.clone())?;
 
     let type_suffix = std::any::type_name::<T>();
-    let type_name = clang_type_name(&type_suffix);
 
     let kernel_name = format!("broadcast_matrix_vec_{}", type_suffix);
-    let program = self.env.get_or_compile_program(&kernel_name, || {
-      broadcast_matrix_source(&type_name, &type_suffix)
-    })?;
+    let program = self.env.get_or_compile_program(&type_suffix)?;
     let kernel = ocl::Kernel::builder()
       .program(&program)
       .name(&kernel_name)
@@ -236,7 +216,7 @@ where
       .arg(output.strides[1] as i32)
       .arg(output.offset[0] as i32)
       .arg(output.offset[1] as i32)
-      .arg(rows)
+      .arg(rows as i32)
       .arg(self.shape[0] as i32)
       .build()?;
 
@@ -248,12 +228,9 @@ where
 
   pub fn sum(&self) -> Result<T, Error> {
     let type_suffix = std::any::type_name::<T>();
-    let type_name = clang_type_name(&type_suffix);
 
     let kernel_name = format!("sum_vec_{}", type_suffix);
-    let program = self
-      .env
-      .get_or_compile_program(&kernel_name, || sum_source(&type_name, &type_suffix))?;
+    let program = self.env.get_or_compile_program(&type_suffix)?;
 
     let output_buffer = ocl::Buffer::<T>::builder()
       .queue(self.env.queue.clone())

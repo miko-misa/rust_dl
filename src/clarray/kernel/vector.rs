@@ -89,7 +89,7 @@ pub fn elementwise_op_source(op: &str, type_name: &str, type_suffix: &str) -> St
 
       int index = get_global_id(0);
 
-      if (index >= len || col >= cols) return;
+      if (index >= len) return;
 
       int a_index = (index + a_offset) * a_stride;
       int b_index = (index + b_offset) * b_stride;
