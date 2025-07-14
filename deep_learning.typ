@@ -1342,10 +1342,129 @@ $
   <=> f_H - s_H &<= 2P_H < f_H\
   <=> (f_H - s_H)/2 &<= P_H < f_H/2\
 $
-このような条件を満たす$P_H$ならばSame Paddingになるが、ストライドが1である場合はこの不等式を満たすような$P_H$がない場合がある。それは$S_H$が偶数である場合である。なので、ストライドには奇数を使うことが望ましい。$s_H>1$のときは
+このような条件を満たす$P_H$ならばSame Paddingになるが、ストライドが1である場合はこの不等式を満たすような$P_H$がない場合がある。それは$s_H$が偶数である場合である。なので、ストライドには奇数を使うことが望ましい。$s_H>1$のときは
 $
 P_H = ceil((f_H - s_H)/2)
 $を使うことが多い。当然、$P_W$についても同様の議論が可能である。いくつかのライブラリでは左右非対称なパディングを行ってSame Paddingを実装している。が、ここでは議論しないことにする。
 
-== 畳み込みの高速化（img2col + GM）
+== 畳み込みの高速化（img2col + GEMM）
+先程定義した畳み込みは、すべての受容野に対してフィルタの数$C_text("out")$だけ計算を行う必要がある。この場合、深いループが必要なことは明らかである。これを克服するために、img2colという手段を用いてテンソルを行列に変換し、畳み込みの演算を一般行列積（GEMM）として解釈するという手法をここでは議論したい。この議論はやや天下り的に行われるのでその正当化について重点的に議論する。具体的な議論に入る前に、感覚的な説明を行う。畳み込みでは重み共有を行っているという性質について、各受容野についておなじフィルタ演算を行っている。これは行列積においてある成分が演算に複数回用いられていることと対応している。また、各受容野では重みと成分の積の和を計算している。これは行列積においても同様であるのでこれは対応する。どうだろう、なんとなく行列積に変換できそうな気がしてきたのではないだろうか。では、実際にどのような変換を行うかを見てみよう。ここからの議論ではバイアスについて考えずに進める。なぜなら、バイアスは出力に対して加算を行うだけで適応できるからである。
 
+まず、入力$tensor(X)$と重み$tensor(W)^((k)) (k=1,dots,C_text("out"))$及び出力$tensor(Y)$を今までどおり定義する。大きさは以下のように定義する。
+
+$
+  tensor(X)&in& RR^(H times W times C_text("in"))\
+  tensor(W)^((k))&in& RR^(f_H times f_W times C_text("in"))\
+  tensor(Y)&in& RR^(H^prime times W^prime times C_text("out"))
+$
+
+ストライドを$(s_H,s_W)$とし、これらの値は適切なものとする。まず、各受容野---つまりは$tensor(X)$の一部を次のように改めて定義する。
+
+$
+  tensor(X)^((i,j)) &colon = mat(
+    bold(x)_(1 + s_H times (i - 1), 1 + s_W times (j - 1), *), bold(x)_(1 + s_H times (i - 1), 2 + s_W times (j - 1), *), dots, bold(x)_(1 + s_H times (i - 1), f_W + s_W times (j - 1), *);
+    bold(x)_(2 + s_H times (i - 1), 1 + s_W times (j - 1), *), bold(x)_(2 + s_H times (i - 1), 2 + s_W times (j - 1), *), dots, bold(x)_(2 + s_H times (i - 1), f_W + s_W times (j - 1), *);
+    dots.v, dots.v, dots.down, dots.v;
+    bold(x)_(f_H + s_H times (i - 1), 1 + s_W times (j - 1), *), bold(x)_(f_H + s_H times (i - 1), 2 + s_W times (j - 1), *), dots, bold(x)_(f_H + s_H times (i - 1), f_W + s_W times (j - 1), *);
+  )\
+  &in RR^(f_H times f_W times C_text("in"))\
+$
+ここで、$i,j$はそれぞれ出力の高さと幅の添え字である。つまり、$tensor(X)^((i,j))$は出力の$(i,j)$番目の成分に対応する受容野を表す。成分の書き下しではわかりにくいが、$H$方向に$i-1$回、$W$方向に$j-1$回スライドした受容野内の入力$tensor(X)$の成分である。この先、このテンソルの$(p, q, r)$要素を$x^((i,j))_(p,q,r)$と表記する。このテンソル内の要素ある順番で行ベクトル$bold(x)_text("i2c")^((i,j))$に並び替える。ここではこの順番を一般的な順番である$C, H, W$の順番で並び替えるとする。これは先に$C$でソートし各$C$内で$H$についてソートし、最後に各$C,H$内で$W$でソートする。要素をたどる方向は$W, H, C$の順である。実際にやってみよう。
+
+$
+  bold(x)_text("i2c")^((i,j)) = (&x^((i,j))_(1,1,1), x^((i,j))_(1,2,1), dots, x^((i,j))_(1,f_W,1), x^((i,j))_(2,1,1), x^((i,j))_(2,2,1), dots, x^((i,j))_(2,f_W,1), dots, x^((i,j))_(f_H,f_W,1)\
+  &x^((i,j))_(1,1,2), x^((i,j))_(1,2,2), dots, x^((i,j))_(1,f_W,2), x^((i,j))_(2,1,2), x^((i,j))_(2,2,2), dots, x^((i,j))_(2,f_W,2), dots, x^((i,j))_(f_H,f_W,2)\
+  & dots\
+  &x^((i,j))_(1,1,C_text("in")), x^((i,j))_(1,2,C_text("in")), dots, x^((i,j))_(1,f_W,C_text("in")), x^((i,j))_(2,1,C_text("in")), x^((i,j))_(2,2,C_text("in")), dots, x^((i,j))_(2,f_W,C_text("in")), dots, x^((i,j))_(f_H,f_W,C_text("in")))\
+  in & RR^((f_H f_W C_text("in")))\
+$
+
+このように、受容野を要素数$f_H times f_W times C_text("in")$の行ベクトルに変換することができた。$f_H times f_W times C_text("in")$は次元数ではなく要素数であることに注意が必要だ。これを全ての受容野について行うと、$H^prime times W^prime$個の行ベクトルが得られる。これらを並べて$tensor(X)$の行列表現である$bold(X)_text("i2c") in RR^((H^prime W^prime)times (f_H f_W C_text("in")))$を得る。なお、並べる順番は先程同様に決められるべきで、今回は$i, j$の順番で行ベクトルを行列の$H^prime W^prime$方向に追加していくことにする。つまり、
+
+$
+  bold(X)_text("i2c") = mat(
+    bold(x)_text("i2c")^((1,1));
+    bold(x)_text("i2c")^((1,2));
+    dots.v;
+    bold(x)_text("i2c")^((1,W^prime));
+    bold(x)_text("i2c")^((2,1));
+    bold(x)_text("i2c")^((2,2));
+    dots.v;
+    bold(x)_text("i2c")^((2,W^prime));
+    dots.v;
+    dots.v;
+    bold(x)_text("i2c")^((H^prime,W^prime));
+  ) in RR^((H^prime W^prime)times (f_H f_W C_text("in")))
+$
+となる。これで入力テンソルを行列に変換することができた。次にフィルタの行列表現を得る。まず、入力の各受容野を行ベクトルに変換したのと同様に、各フィルタ$tensor(W)^((k))$を列ベクトル$bold(x)_text("i2c")^((k))$に変換する。このとき、同じ方法で並び替えることが必要だ。
+$
+  bold(w)_text("i2c")^((k)) = (&w^((k))_(1,1,1), w^((k))_(1,2,1), dots, w^((k))_(1,f_W,1), w^((k))_(2,1,1), w^((k))_(2,2,1), dots, w^((k))_(2,f_W,1), dots, w^((k))_(f_H,f_W,1), dots, w^((k))_(f_H,f_W,C_text("in")))^top
+  in & RR^((f_H f_W C_text("in")))
+$
+このようにして、各フィルタを列ベクトルに変換することができた。これを全てのフィルタについて行うと、$C_text("out")$個の列ベクトルが得られる。これらを並べて$bold(W)_text("i2c") in RR^((f_H f_W C_text("in")) times C_text("out"))$を得る。なお、並べる順番は$k$の順番で列ベクトルを行列の$C_text("out")$方向に追加していくことにする。つまり、
+$
+  bold(W)_text("i2c") = mat(
+    bold(w)_text("i2c")^((1)), bold(w)_text("i2c")^((2)), dots, bold(w)_text("i2c")^((C_text("out")))
+  ) in RR^((f_H f_W C_text("in")) times C_text("out"))
+$
+である。これでフィルタの行列表現を得ることができた。この行列はすべての$C_text("out")$個のフィルタを内包していることに注意されたい。ここで$bold(X)_text("i2c")$と$bold(W)_text("i2c")$の行列積を考えよう。２つの行列の大きさが行列積の要件を満たしていることは明らかである。
+
+$
+  bold(Y)_text("i2c") &= bold(X)_text("i2c") dot bold(W)_text("i2c")\
+  &in RR^((H^prime W^prime) times C_text("out"))\
+$
+このとき、$bold(Y)$は次のように定義した行ベクトル$bold(y)^((i, j))_text("i2c")$を用いて書き下せる。
+$
+  bold(y)^((i, j))_text("i2c") &= bold(x)_text("i2c")^((i, j)) dot bold(W)_text("i2c")\
+  &= bold(x)_text("i2c")^((i, j)) dot ( bold(w)_text("i2c")^((1)), bold(w)_text("i2c")^((2)), dots, bold(w)_text("i2c")^((C_text("out")))) in RR^(C_text("out"))\
+
+  bold(Y)_text("i2c") &= mat(
+    bold(y)_text("i2c")^((1,1));
+    bold(y)_text("i2c")^((1,2));
+    dots.v;
+    bold(y)_text("i2c")^((1,W^prime));
+    bold(y)_text("i2c")^((2,1));
+    bold(y)_text("i2c")^((2,2));
+    dots.v;
+    bold(y)_text("i2c")^((2,W^prime));
+    dots.v;
+    dots.v;
+    bold(y)_text("i2c")^((H^prime,W^prime));
+  )
+$
+これは行列の定義より明らかである。最後にこれをテンソルに戻す。$bold(y)_text("i2c")^((i,j))$を出力テンソル$tensor(Y) in RR^(H^prime times W^prime times C_text("out"))$の$(i, j , *)$成分とすると、以下のような出力が得られる。
+$
+  tensor(Y) = mat(
+    bold(y)_text("i2c")^((1,1)), bold(y)_text("i2c")^((1,2)), dots, bold(y)_text("i2c")^((1,W^prime));
+    bold(y)_text("i2c")^((2,1)), bold(y)_text("i2c")^((2,2)), dots, bold(y)_text("i2c")^((2,W^prime));
+    dots.v, dots.v, dots.down, dots.v;
+    bold(y)_text("i2c")^((H^prime,1)), bold(y)_text("i2c")^((H^prime,2)), dots, bold(y)_text("i2c")^((H^prime,W^prime));
+  )
+$
+ではこの正当化について議論しよう。畳み込みの定義から以下のことが言える。
+$
+  y_(i,j,k) &= sum_(1 <= h <= f_H) sum_(1 <= w <= f_W) sum_(1 <= c <= C_text("in")) w^((k))_(h,w, c) times x_(h + s_H times (i - 1), w + s_W times (j - 1), c)\
+$
+ここで、$y_(i,j,k)$は定義に沿った出力の成分であり、現在議論したいのはこれがimg2colを用いた出力の行列表示$bold(Y)_text("i2c")$において$[bold(y)^((i, j))_text("i2c")]_k$と一致することである。
+
+
+さて、先程の式の右辺は、まさに$bold(x)_text("i2c")^((i,j))$と$bold(w)_text("i2c")^((k))$の標準内積である。または、前者が行ベクトルで後者が列ベクトルであることを思い出せば、行列積とも解釈できる。行ベクトル$bold(y)^((i, j))_text("i2c")$の定義を思い出せば
+$
+  [bold(y)^((i, j))_text("i2c")]_k &= [bold(x)_text("i2c")^((i, j)) dot bold(W)_text("i2c")]_k\
+  &= bold(x)_text("i2c")^((i, j)) dot bold(w)_text("i2c")^((k)) = y_(i,j,k)\
+$
+以上の議論からimg2colによって得られた行列表示を適切に変換したものが畳み込みの出力であることがわかる。よって、img2colを用いて畳み込みを行うことは正当化される。
+ここで、再びバイアスを適応することを考えれば
+$
+  y_(i,j,k) &= b_k + sum_(1 <= h <= f_H) sum_(1 <= w <= f_W) sum_(1 <= c <= C_text("in")) w^((k))_(h,w, c) times x_(h + s_H times (i - 1), w + s_W times (j - 1), c)\
+$
+となるように変えれば良い。すなわち、$bold(x)_text("i2c")^((i, j)) dot bold(w)_text("i2c")^((k))$を
+$
+  bold(x)_text("i2c")^((i, j)) dot bold(w)_text("i2c")^((k)) + b_k\
+$
+に変えれば良い。すなわち、
+$
+  &bold(y)^((i, j))_text("i2c") = bold(x)_text("i2c")^((i, j)) dot bold(W)_text("i2c") + bold(b)\
+  <=> &bold(Y)_text("i2c") = bold(X)_text("i2c") dot bold(W)_text("i2c") + bold(1)_(H^prime W^prime) dot bold(b)\
+$
+という計算にすることでバイアスを適応することができる。
