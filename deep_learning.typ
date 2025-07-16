@@ -1819,7 +1819,7 @@ $
   line((-1.4, 2, -1.4), (-1.4, 4, -1.4), mark: (end: "straight", xy-up: (1, 0, 0)), name: "sum")
   content(("sum.start", 0.9, "sum.end"), text(size: 7pt)[受容野毎に展開], anchor: "north", padding: 0.1)
 
-  line((-1.4, 6.5, -1.4), (-1.4, 8.5, -1.4), mark: (end: "straight", xy-up: (1, 0, 0)), name: "sum")
+  line((-1.4, 6.7, -1.4), (-1.4, 8.7, -1.4), mark: (end: "straight", xy-up: (1, 0, 0)), name: "sum")
   content(("sum.start", 1, "sum.end"), text(size: 7pt)[列方向に結合], anchor: "north", padding: 0.1)
 
   content((2, 5, 0.8), text(size: 8pt)[$bold(x)_text("i2c")^((1,1))$], anchor: "east", padding: 0.1)
