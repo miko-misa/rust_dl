@@ -1321,7 +1321,269 @@ $
   tensor(Y)^((k)) &= tensor(X) attach(ast.op, b: (s_H,s_W)) tensor(W)^((k)) + (bold(1)_(H^prime) dot bold(1)_(W^prime)^top) b_k quad quad k = 1,2,dots,C_text("out")\
    tensor(Y) &= (tensor(Y)^((1)), tensor(Y)^((2)), dots, tensor(Y)^((C_text("out"))))\
 $
-である。これが、畳み込み層の順伝播である。
+である。これが、畳み込み層の順伝播である。下図はそのイメージを図示したものである。
+
+#let block_3d(
+  H: int, W: int, C: int,
+  origin_x: float,
+  origin_y: float,
+  origin_z: float,
+  color: black,
+  background: white,
+  width_size: 2pt,
+  is_braced: true,
+  text_H: "",
+  text_W: "",
+  text_C: "",
+  faces: "ftr",
+) = {
+  import cetz.draw: *
+  import cetz.decorations: *
+
+  let face_top = (
+    (origin_x, origin_y, origin_z),
+    (origin_x - W, origin_y, origin_z),
+    (origin_x - W, origin_y + C, origin_z),
+    (origin_x, origin_y + C, origin_z)
+  )
+
+  let face_front = (
+    (origin_x, origin_y, origin_z),
+    (origin_x, origin_y + C, origin_z),
+    (origin_x, origin_y + C, origin_z - H),
+    (origin_x, origin_y, origin_z - H)
+  )
+
+  let face_right = (
+    (origin_x, origin_y + C, origin_z),
+    (origin_x - W, origin_y + C, origin_z),
+    (origin_x - W, origin_y + C, origin_z - H),
+    (origin_x, origin_y + C, origin_z - H)
+  )
+
+  for face in faces.split(regex("")) {
+    if face == "f" {
+      line(..face_front, stroke: color, width: width_size, name: "face1", close: true, fill: background)
+    } else if face == "t" {
+      line(..face_top, stroke: color, width: width_size, name: "face1", close: true, fill: background)
+    } else if face == "r" {
+      line(..face_right, stroke: color, width: width_size, name: "face1", close: true, fill: background)
+    }
+  }
+
+
+  if true {
+    if text_W != "" {
+      flat-brace((origin_x, origin_y, origin_z), (origin_x - W, origin_y, origin_z), name: "input_W")
+      content("input_W", text_W, anchor: "south", padding: 0.2cm, angle: 45deg)
+    }
+    if text_C != "" {
+      flat-brace((origin_x - W, origin_y, origin_z), (origin_x - W, origin_y + C, origin_z), name: "input_C")
+      content("input_C", text_C, anchor: "south", padding: 0.2cm)
+    }
+    if text_H != "" {
+      on-yz(flat-brace((origin_z, origin_y + C, W - origin_x),(origin_z - H, origin_y + C, W - origin_x), flip: true, name: "input_H"))
+      content("input_H", text_H, anchor: "south", padding: 0.2cm, angle: -90deg)
+    }
+  }
+}
+
+#align(center)[
+#cetz.canvas({
+  import cetz.draw: *
+  import cetz.decorations: *
+
+  set-transform(((-0.3, 1, 0, 0), (0.3, 0, -1, 0), (1, 0, 0, 0), (0, 0, 0, 1)))
+
+  block_3d(
+    H: 3.5, W: 3.8, C: 0.8,
+    origin_x: 0,
+    origin_y: 0,
+    origin_z: 0,
+    is_braced: true,
+    text_H: $H$,
+    text_W: $W$,
+    text_C: $C_text("in")$,
+  )
+
+  content((0, 1, -4), text(size: 8pt)[入力$tensor(X)$])
+
+  line((-1.4, 1.9, -1.4), (-1.4, 3, -1.4), mark: (end: "straight", xy-up: (1, 0, 0)))
+
+  block_3d(
+    H: 2.8, W: 3, C: 0.3,
+    origin_x: 0,
+    origin_y: 3.5,
+    origin_z: 0,
+    text_C: $1$
+  )
+
+  block_3d(
+    H: 2.8, W: 3, C: 0.3,
+    origin_x: 0,
+    origin_y: 4.0,
+    origin_z: 0,
+    text_C: $1$
+  )
+
+  content((-1.4, 4.9, -1.3), text(size: 16pt)[$dots$], fill: white)
+
+  block_3d(
+    H: 2.8, W: 3, C: 0.3,
+    origin_x: 0,
+    origin_y: 5.7,
+    origin_z: 0,
+    text_C: $1$
+  )
+
+  content((0, 5, -4), text(size: 8pt)[$tensor(Y)^((k))$])
+
+  flat-brace((0, 3.5, -2.8), (0, 6, -2.8), name: "stride_H", flip: true)
+  content("stride_H", [$C_text("out")$], anchor: "north", padding: 0.3)
+
+  line((-1.4, 7, -1.4), (-1.4, 9, -1.4), mark: (end: "straight", xy-up: (1, 0, 0)), name: "sum")
+  content(("sum.start", 1, "sum.end"), text(size: 7pt)[$C$方向に結合],anchor: "south", padding: 0.1)
+
+  block_3d(
+    H: 2.8, W: 3, C: 1.8,
+    origin_x: 0,
+    origin_y: 10,
+    origin_z: 0,
+    is_braced: true,
+    text_H: $H^prime$,
+    text_W: $W^prime$,
+    text_C: $C_text("out")$,
+  )
+
+  content((0, 11.2, -4), text(size: 8pt)[出力$tensor(Y)$])
+
+  block_3d(
+    H: 0.85, W: 1, C: 0.8,
+    origin_x: 0,
+    origin_y: 0,
+    origin_z: 0,
+    color: red,
+    width_size: 2pt,
+    background: red.transparentize(30%),
+  )
+
+  block_3d(
+    H: 0.85, W: 1, C: 0.8,
+    origin_x: 0,
+    origin_y: -3,
+    origin_z: 1,
+    color: red,
+    width_size: 2pt,
+    background: red.transparentize(30%),
+    is_braced: true,
+    text_H: text(size: 8pt)[$f_H$],
+    text_W: text(size: 8pt)[$f_W$],
+    text_C: text(size: 8pt)[$C_text("in")$],
+  )
+
+  block_3d(
+    H: 0.85, W: 1, C: 0.8,
+    origin_x: 0,
+    origin_y: -3,
+    origin_z: -0.2,
+    color: blue,
+    width_size: 2pt,
+    background: blue.transparentize(30%),
+  )
+
+  content((0, -2.4, -1.75), text(size: 16pt)[$dots.v$])
+
+  block_3d(
+    H: 0.85, W: 1, C: 0.8,
+    origin_x: 0,
+    origin_y: -3,
+    origin_z: -2.7,
+    color: yellow,
+    width_size: 2pt,
+    background: yellow.transparentize(30%),
+  )
+
+
+  content((0, -2.4, -4.2), text(size: 8pt)[$C_text("out")$個のフィルター\ #set align(center)
+  $tensor(W)^((k))$])
+
+  block_3d(
+    H: 0.85, W: 1, C: 0.8,
+    origin_x: -0.6,
+    origin_y: 0,
+    origin_z: 0,
+    color: red.transparentize(60%),
+    faces: "tr",
+    background: red.transparentize(60%),
+  )
+
+  block_3d(
+    H: 0.85, W: 1, C: 0.8,
+    origin_x: -1.9,
+    origin_y: 0,
+    origin_z: -1.7,
+    color: blue,
+    faces: "r",
+    background: blue.transparentize(60%),
+  )
+
+  block_3d(
+    H: 0.85, W: 1, C: 0.8,
+    origin_x: -0.7,
+    origin_y: 0,
+    origin_z: -2.3,
+    color: yellow,
+    faces: "r",
+    background: yellow.transparentize(60%),
+  )
+
+  block_3d(
+    H: 0.3, W: 0.32, C: 0.3,
+    origin_x: 0,
+    origin_y: 3.5,
+    origin_z: 0,
+    color: red,
+    background: red.transparentize(30%),
+  )
+  block_3d(
+    H: 0.3, W: 0.32, C: 0.3,
+    origin_x: -0.3,
+    origin_y: 3.5,
+    origin_z: 0,
+    color: red,
+    faces: "tr",
+    background: red.transparentize(60%),
+  )
+
+  block_3d(
+    H: 0.3, W: 0.32, C: 0.3,
+    origin_x: -1.7,
+    origin_y: 4.0,
+    origin_z: -1.7,
+    faces: "r",
+    color: blue,
+    background: blue.transparentize(30%),
+  )
+
+  block_3d(
+    H: 0.3, W: 0.32, C: 0.3,
+    origin_x: -0.7,
+    origin_y: 5.7,
+    origin_z: -2.1,
+    faces: "r",
+    color: yellow,
+    background: yellow.transparentize(30%),
+  )
+
+  line((0, -0.4, 0), (-1, -0.4, 0), mark: (end: "straight", xy-up: (0, 0, 1)), name: "stride_W")
+  content(("stride_W.start", 0.5, "stride_W.end"), text(size: 7pt)[$s_W$],anchor: "east", padding: 0.1)
+
+  line((0, 0.8, -0.83), (0, 3.5, -0.3), stroke: (paint: red, dash: "dotted"))
+  line((-0.93, 0.8, 0), (-0.32, 3.5, 0), stroke: (paint: red, dash: "dotted"))
+  // content((0, 5, -2.5), $times C_text("out")$)
+})
+]
+
 == パディング
 ここまでは畳み込みの際に入力の大きさとストライドの大きさが適切に選ばれている、つまりは正しくスライドが終了することを仮定してきた。しかし、そうではない大きさについても考えたい。まずは、スライドはできるだけ行われるものとし、必ずカーネルが入力の端にかかるようにしたい。つまり、決めたストライド通りにスライドするが、最後の一回のスライドではカーネルが入力の端にかかるようにする。すると、出力の大きさは次のように表せる。
 $
@@ -1468,3 +1730,215 @@ $
   <=> &bold(Y)_text("i2c") = bold(X)_text("i2c") dot bold(W)_text("i2c") + bold(1)_(H^prime W^prime) dot bold(b)\
 $
 という計算にすることでバイアスを適応することができる。
+
+#align(center)[
+#cetz.canvas({
+  import cetz.draw: *
+  import cetz.decorations: *
+
+  set-transform(((-0.3, 1, 0, 0), (0.3, 0, -1, 0), (1, 0, 0, 0), (0, 0, 0, 1)))
+
+  block_3d(
+    H: 3.5, W: 3.8, C: 0.8,
+    origin_x: 0,
+    origin_y: 0,
+    origin_z: 0,
+    is_braced: true,
+    text_H: $H$,
+    text_W: $W$,
+    text_C: $C_text("in")$,
+  )
+  content((0, 1, -4), text(size: 8pt)[入力$tensor(X)$])
+  content((0, 11.2, -4), text(size: 8pt)[行列表現$bold(X)_text("i2c")$])
+
+  block_3d(
+    H: 0.3, W: 8, C: 0.3,
+    origin_x: 2,
+    origin_y: 5,
+    origin_z: -3,
+    color: black,
+  )
+
+  block_3d(
+    H: 0.3, W: 8, C: 0.3,
+    origin_x: 2,
+    origin_y: 5,
+    origin_z: 0.5,
+    color: black,
+    background: gray.transparentize(50%),
+  )
+
+  block_3d(
+    H: 0.3, W: 8, C: 0.3,
+    origin_x: 2,
+    origin_y: 5,
+    origin_z: 1,
+    text_W: $f_H times f_W times C_text("in")$,
+    text_H: $1$,
+    text_C: $1$,
+    color: black,
+    width_size: 2pt,
+    background: gray,
+  )
+
+   block_3d(
+    H: 0.85, W: 1, C: 0.8,
+    origin_x: -0.6,
+    origin_y: 0,
+    origin_z: 0,
+    color: gray.transparentize(50%),
+    width_size: 2pt,
+    background: gray.transparentize(50%),
+  )
+
+
+  block_3d(
+    H: 0.85, W: 1, C: 0.8,
+    origin_x: 0,
+    origin_y: 0,
+    origin_z: 0,
+    color: black,
+    width_size: 2pt,
+    background: gray.transparentize(20%),
+  )
+
+  block_3d(
+    H: 4, W: 8, C: 0.3,
+    origin_x: 2,
+    origin_y: 10,
+    origin_z: 1,
+    text_W: $f_H times f_W times C_text("in")$,
+    text_H: $H^prime times W^prime$,
+    color: black,
+    width_size: 2pt,
+  )
+
+  content((-1.4, 5.5, -0.8), text(size: 16pt)[$dots.v$], fill: white)
+  content((-1.4, 5.5, -1.4), text(size: 16pt)[$dots.v$], fill: white)
+
+  line((-1.4, 2, -1.4), (-1.4, 4, -1.4), mark: (end: "straight", xy-up: (1, 0, 0)), name: "sum")
+  content(("sum.start", 0.9, "sum.end"), text(size: 7pt)[受容野毎に展開], anchor: "north", padding: 0.1)
+
+  line((-1.4, 6.5, -1.4), (-1.4, 8.5, -1.4), mark: (end: "straight", xy-up: (1, 0, 0)), name: "sum")
+  content(("sum.start", 1, "sum.end"), text(size: 7pt)[列方向に結合], anchor: "north", padding: 0.1)
+
+  content((2, 5, 0.8), text(size: 8pt)[$bold(x)_text("i2c")^((1,1))$], anchor: "east", padding: 0.1)
+  content((2, 5, 0.3), text(size: 8pt)[$bold(x)_text("i2c")^((1,2))$], anchor: "east", padding: 0.1)
+  content((2, 5, -3.2), text(size: 8pt)[$bold(x)_text("i2c")^((H^prime,W^prime))$], anchor: "east", padding: 0.1)
+})
+]
+
+#align(center)[
+#cetz.canvas({
+  import cetz.draw: *
+  import cetz.decorations: *
+
+  set-transform(((-0.3, 1, 0, 0), (0.3, 0, -1, 0), (1, 0, 0, 0), (0, 0, 0, 1)))
+
+
+  block_3d(
+    H: 0.85, W: 1, C: 0.8,
+    origin_x: 0,
+    origin_y: 0,
+    origin_z: 1,
+    color: red,
+    width_size: 2pt,
+    background: red.transparentize(30%),
+    is_braced: true,
+    text_H: text(size: 8pt)[$f_H$],
+    text_W: text(size: 8pt)[$f_W$],
+    text_C: text(size: 8pt)[$C_text("in")$],
+  )
+
+  block_3d(
+    H: 0.85, W: 1, C: 0.8,
+    origin_x: 0,
+    origin_y: 0,
+    origin_z: -0.2,
+    color: blue,
+    width_size: 2pt,
+    background: blue.transparentize(30%),
+  )
+
+  content((0, 0.6, -1.75), text(size: 16pt)[$dots.v$])
+
+  block_3d(
+    H: 0.85, W: 1, C: 0.8,
+    origin_x: 0,
+    origin_y: 0,
+    origin_z: -2.7,
+    color: yellow,
+    width_size: 2pt,
+    background: yellow.transparentize(30%),
+  )
+
+  content((0, 0.6, -4.2), text(size: 8pt)[$C_text("out")$個のフィルター\ #set align(center)
+  $tensor(W)^((k))$])
+
+  block_3d(
+    H: 5, W: 0.3, C: 0.3,
+    origin_x: -4.2,
+    origin_y: 4.5,
+    origin_z: 1,
+    color: yellow,
+    width_size: 2pt,
+    background: yellow.transparentize(30%),
+    text_H: $f_H times f_W times C_text("in")$,
+    text_W: $1$,
+    text_C: $1$,
+  )
+
+  content((-4.3, 4.7, -4.4), text(size: 9pt)[$bold(w)_text("i2c")^((C_text("out")))$])
+  content((-2.1, 4.7, -4.6), text(size: 9pt)[$bold(w)_text("i2c")^((2))$])
+  content((-0.4, 4.7, -4.5), text(size: 9pt)[$bold(w)_text("i2c")^((1))$])
+
+  block_3d(
+    H: 5, W: 0.3, C: 0.3,
+    origin_x: -0.8,
+    origin_y: 4.5,
+    origin_z: 1,
+    color: blue,
+    width_size: 2pt,
+    background: blue.transparentize(30%),
+  )
+
+  block_3d(
+    H: 5, W: 0.3, C: 0.3,
+    origin_x: 0,
+    origin_y: 4.5,
+    origin_z: 1,
+    width_size: 2pt,
+    background: white,
+  )
+
+  block_3d(
+    H: 5, W: 0.3, C: 0.3,
+    origin_x: 0,
+    origin_y: 4.5,
+    origin_z: 1,
+    color: red,
+    width_size: 2pt,
+    background: red.transparentize(30%),
+  )
+
+  content((-2.2, 4.6, -1.8), text(size: 16pt)[$dots$], fill: white, angle: 50deg)
+  content((-3.5, 4.55, -1.8), text(size: 16pt)[$dots$], fill: white, angle: 50deg)
+
+  block_3d(
+    H: 5, W: 5, C: 0.3,
+    origin_x: 0,
+    origin_y: 10,
+    origin_z: 1.5,
+    text_H: $f_H times f_H times C_text("in")$,
+    text_W: $C_text("out")$,
+  )
+
+  content((0, 11, -4.2), text(size: 8pt)[行列表現$bold(W)_text("i2c")$])
+
+  line((-1.4, 1.2, -1.4), (-1.4, 3.7, -1.4), mark: (end: "straight", xy-up: (1, 0, 0)), name: "sum")
+  content(("sum.start", 1.1, "sum.end"), text(size: 7pt)[フィルター毎に展開], anchor: "north", padding: 0.1)
+
+  line((-1.4, 6.7, -1.4), (-1.4, 9, -1.4), mark: (end: "straight", xy-up: (1, 0, 0)), name: "sum")
+  content(("sum.start", 1.1, "sum.end"), text(size: 7pt)[行方向に結合], anchor: "north", padding: 0.1)
+})
+]
