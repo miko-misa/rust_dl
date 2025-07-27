@@ -68,3 +68,103 @@ pub fn load_and_prepare_batches(path: &str, batch_size: usize) -> (Vec<Batch>, u
   let num_batches = batches.len();
   (batches, num_batches)
 }
+
+use std::error::Error;
+use std::path::Path;
+use std::sync::Arc;
+
+#[derive(Clone)]
+struct InnerData {
+  rows: Vec<Vec<f64>>,
+  labels: Vec<usize>,
+}
+
+/// x, y, batch_len を返すイテレータ。Clone 対応。
+pub struct BatchIter {
+  inner: Arc<InnerData>,
+  num_classes: usize,
+  batch_size: usize,
+  cursor: usize,
+}
+
+impl Clone for BatchIter {
+  fn clone(&self) -> Self {
+    BatchIter {
+      inner: Arc::clone(&self.inner),
+      num_classes: self.num_classes,
+      batch_size: self.batch_size,
+      cursor: 0, // クローンは先頭から開始
+    }
+  }
+}
+
+impl Iterator for BatchIter {
+  type Item = (Vec<f64>, Vec<f64>, usize);
+
+  fn next(&mut self) -> Option<Self::Item> {
+    let total = self.inner.rows.len();
+    if self.cursor >= total {
+      return None;
+    }
+    let end = (self.cursor + self.batch_size).min(total);
+    let batch_len = end - self.cursor;
+    let feature_len = self.inner.rows[0].len();
+
+    let mut x = Vec::with_capacity(batch_len * feature_len);
+    let mut y = Vec::with_capacity(batch_len * self.num_classes);
+
+    for i in self.cursor..end {
+      x.extend_from_slice(&self.inner.rows[i]);
+      let mut one = vec![0.0f64; self.num_classes];
+      let cls = self.inner.labels[i];
+      one[cls] = 1.0;
+      y.extend_from_slice(&one);
+    }
+
+    self.cursor = end;
+    Some((x, y, batch_len))
+  }
+}
+
+pub fn load_csv_as_batches<P: AsRef<Path>>(
+  path: P,
+  batch_size: usize,
+  num_classes: usize,
+) -> Result<BatchIter, Box<dyn Error>> {
+  let mut rdr = ReaderBuilder::new().has_headers(true).from_path(path)?;
+
+  let mut rows = Vec::new();
+  let mut labels = Vec::new();
+  for result in rdr.records() {
+    let record = result?;
+    let mut vals: Vec<f64> = record
+      .iter()
+      .map(|s| s.parse::<f64>().expect("parse error"))
+      .collect();
+    let label = vals.pop().expect("no label") as usize;
+    rows.push(vals);
+    labels.push(label);
+  }
+
+  // シャッフル
+  let mut idx: Vec<_> = (0..rows.len()).collect();
+  idx.shuffle(&mut thread_rng());
+
+  let mut s_rows = Vec::with_capacity(rows.len());
+  let mut s_labels = Vec::with_capacity(labels.len());
+  for i in idx {
+    s_rows.push(rows[i].clone());
+    s_labels.push(labels[i]);
+  }
+
+  let inner = InnerData {
+    rows: s_rows,
+    labels: s_labels,
+  };
+  Ok(BatchIter {
+    inner: Arc::new(inner),
+    num_classes,
+    batch_size,
+    cursor: 0,
+  })
+}

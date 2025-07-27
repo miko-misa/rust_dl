@@ -17,6 +17,8 @@ pub trait OclComputeNum:
 {
 }
 
+pub trait TensorDim: AsRef<[usize]> + AsMut<[usize]> + Debug + Clone {}
+
 impl OclComputeNum for f32 {}
 impl OclComputeNum for f64 {}
 
@@ -125,11 +127,32 @@ where
   D: AsRef<[usize]> + AsMut<[usize]> + Debug + Clone,
 {
   pub fn zeros(shape: D, env: Arc<GPUEnv>) -> Result<Self, Error> {
-    Self::from_vec(
-      shape.clone(),
-      vec![T::zero(); shape.as_ref().iter().product()],
+    let buffer = Buffer::<T>::builder()
+      .queue(env.queue.clone())
+      .len(shape.as_ref().iter().product::<usize>())
+      .fill_val(T::default())
+      .build()?;
+
+    let mut stride = shape.clone();
+    for i in (0..shape.as_ref().len()).rev() {
+      if i == shape.as_ref().len() - 1 {
+        stride.as_mut()[i] = 1;
+      } else {
+        stride.as_mut()[i] = stride.as_ref()[i + 1] * shape.as_ref()[i + 1];
+      }
+    }
+
+    Ok(GPUTensor {
+      buffer,
+      shape: shape.clone(),
+      strides: stride,
+      offset: {
+        let mut offset = shape.clone();
+        offset.as_mut().iter_mut().for_each(|x| *x = 0);
+        offset
+      },
       env,
-    )
+    })
   }
 
   pub fn from_vec(shape: D, data: Vec<T>, env: Arc<GPUEnv>) -> Result<Self, Error> {
@@ -171,6 +194,38 @@ where
   pub fn len(&self) -> usize {
     self.shape.as_ref().iter().product()
   }
+
+  pub fn write_buffer(&mut self, buffer: &Buffer<T>) -> Result<(), Error> {
+    if buffer.len() != self.len() {
+      return Err(Error::MismatchedShape {
+        expected: vec![self.len()],
+        found: vec![buffer.len()],
+      });
+    }
+    self.buffer = buffer.clone();
+    Ok(())
+  }
+
+  pub fn mapv<F>(&self, f: F) -> Result<Self, Error>
+  where
+    F: Fn(T) -> T + Send + Sync + 'static,
+  {
+    let output = GPUTensor::<T, D>::zeros(self.shape.clone(), self.env.clone())?;
+    let mut data = vec![T::default(); self.buffer.len()];
+    self.env.queue.finish().map_err(|e| Error::OclError(e))?;
+    self
+      .buffer
+      .read(&mut data)
+      .enq()
+      .map_err(|e| Error::OclError(e))?;
+    let mapped_data: Vec<T> = data.into_iter().map(f).collect();
+    output
+      .buffer
+      .write(&mapped_data)
+      .enq()
+      .map_err(|e| Error::OclError(e))?;
+    Ok(output)
+  }
 }
 
 impl<T> GPUVector<T>
@@ -210,12 +265,12 @@ where
       .queue(self.env.queue.clone())
       .global_work_size(self.shape)
       .arg(&data.buffer)
-      .arg(data.strides[0] as i32)
-      .arg(data.offset[0] as i32)
+      .arg(data.strides[0] as u64)
+      .arg(data.offset[0] as u64)
       .arg(&self.buffer)
-      .arg(self.strides[0] as i32)
-      .arg(self.offset[0] as i32)
-      .arg(self.len() as i32)
+      .arg(self.strides[0] as u64)
+      .arg(self.offset[0] as u64)
+      .arg(self.len() as u64)
       .build()?;
 
     unsafe {
@@ -271,13 +326,13 @@ where
         .queue(self.env.queue.clone())
         .global_work_size(self.shape)
         .arg(&self.buffer)
-        .arg(self.strides[0] as i32)
-        .arg(self.strides[1] as i32)
-        .arg(self.offset[0] as i32)
-        .arg(self.offset[1] as i32)
+        .arg(self.strides[0] as u64)
+        .arg(self.strides[1] as u64)
+        .arg(self.offset[0] as u64)
+        .arg(self.offset[1] as u64)
         .arg(&output_buffer)
-        .arg(self.rows() as i32)
-        .arg(self.cols() as i32)
+        .arg(self.rows() as u64)
+        .arg(self.cols() as u64)
         .build()?;
 
       unsafe {
@@ -328,17 +383,17 @@ where
       .queue(self.env.queue.clone())
       .global_work_size(self.shape)
       .arg(&data.buffer)
-      .arg(data.strides[0] as i32)
-      .arg(data.strides[1] as i32)
-      .arg(data.offset[0] as i32)
-      .arg(data.offset[1] as i32)
+      .arg(data.strides[0] as u64)
+      .arg(data.strides[1] as u64)
+      .arg(data.offset[0] as u64)
+      .arg(data.offset[1] as u64)
       .arg(&self.buffer)
-      .arg(self.strides[0] as i32)
-      .arg(self.strides[1] as i32)
-      .arg(self.offset[0] as i32)
-      .arg(self.offset[1] as i32)
-      .arg(self.rows() as i32)
-      .arg(self.cols() as i32)
+      .arg(self.strides[0] as u64)
+      .arg(self.strides[1] as u64)
+      .arg(self.offset[0] as u64)
+      .arg(self.offset[1] as u64)
+      .arg(self.rows() as u64)
+      .arg(self.cols() as u64)
       .build()?;
 
     unsafe {
@@ -374,14 +429,14 @@ where
       .queue(self.env.queue.clone())
       .global_work_size([contiguous_self.rows()])
       .arg(&contiguous_self.buffer)
-      .arg(contiguous_self.strides[0] as i32)
-      .arg(contiguous_self.strides[1] as i32)
-      .arg(contiguous_self.offset[0] as i32)
-      .arg(contiguous_self.offset[1] as i32)
+      .arg(contiguous_self.strides[0] as u64)
+      .arg(contiguous_self.strides[1] as u64)
+      .arg(contiguous_self.offset[0] as u64)
+      .arg(contiguous_self.offset[1] as u64)
       .arg(&output.buffer)
-      .arg(output.strides[0] as i32)
-      .arg(output.offset[0] as i32)
-      .arg(contiguous_self.cols() as i32)
+      .arg(output.strides[0] as u64)
+      .arg(output.offset[0] as u64)
+      .arg(contiguous_self.cols() as u64)
       .build()?;
 
     unsafe {
@@ -402,19 +457,38 @@ where
       .queue(env.queue.clone())
       .global_work_size(vec.shape[0])
       .arg(&vec.buffer)
-      .arg(vec.strides[0] as i32)
-      .arg(vec.offset[0] as i32)
+      .arg(vec.strides[0] as u64)
+      .arg(vec.offset[0] as u64)
       .arg(&output.buffer)
-      .arg(output.strides[0] as i32)
-      .arg(output.strides[1] as i32)
-      .arg(output.offset[0] as i32)
-      .arg(output.offset[1] as i32)
-      .arg(vec.shape[0] as i32)
-      .arg(vec.shape[0] as i32)
+      .arg(output.strides[0] as u64)
+      .arg(output.strides[1] as u64)
+      .arg(output.offset[0] as u64)
+      .arg(output.offset[1] as u64)
+      .arg(vec.shape[0] as u64)
+      .arg(vec.shape[0] as u64)
       .build()?;
     unsafe {
       kernel.enq()?;
     }
     Ok(output)
+  }
+}
+
+impl<T> GPUTensor<T, [usize; 4]>
+where
+  T: OclComputeNum,
+{
+  pub fn to_cpu(&self) -> Result<Tensor<T, [usize; 4]>, Error> {
+    let mut data = vec![T::default(); self.len()];
+    self
+      .buffer
+      .read(&mut data)
+      .enq()
+      .map_err(|e| Error::OclError(e))?;
+    Ok(Tensor {
+      shape: self.shape.clone(),
+      data,
+      offset: self.offset.clone(),
+    })
   }
 }

@@ -59,9 +59,15 @@ where
             .as_any()
             .downcast_ref::<GPUTensor<T, [usize; 2]>>()
             .unwrap();
-          value
-            .write(&(value - &(grads * self.learning_rate).unwrap()).unwrap())
-            .unwrap();
+          if value.shape[0] == 25088 {
+            // println!("Updating 2D parameter with shape: {:?}", value.shape);
+          }
+          let grads = (grads * self.learning_rate).unwrap();
+          // println!("Grads shape: {:?}", grads.shape);
+          let new_value = (value - &grads).unwrap();
+          // println!("New value shape: {:?}", new_value.shape);
+          value.write(&new_value).unwrap();
+          // println!("completed 2D update");
         }
         _ => panic!("Unsupported tensor rank for SGD optimizer"),
       }

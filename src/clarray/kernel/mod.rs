@@ -1,4 +1,5 @@
 pub mod matrix;
+pub mod tensor;
 pub mod vector;
 
 pub fn clang_type_name(type_name: &str) -> String {
@@ -66,6 +67,7 @@ pub fn get_all_kernels_as_string(type_suffix: &str) -> String {
   all_kernels.push_str(&matrix::clip_source(&type_name, type_suffix));
   all_kernels.push_str(&matrix::row_sum_source(&type_name, type_suffix));
   all_kernels.push_str(&matrix::diag_source(&type_name, type_suffix));
+  all_kernels.push_str(&matrix::row_max_mask_source(&type_name, type_suffix));
 
   // 四則演算
   for &op in &ops {
@@ -80,6 +82,32 @@ pub fn get_all_kernels_as_string(type_suffix: &str) -> String {
       &type_name,
       type_suffix,
     ));
+  }
+
+  // --- tensor.rsのカーネル ---
+  all_kernels.push_str(&format!(
+    "\n// Kernels from tensor.rs (type: {})\n",
+    type_name
+  ));
+  all_kernels.push_str(&tensor::im2col_source(&type_name, &type_suffix));
+  all_kernels.push_str(&tensor::col2im_source(&type_name, &type_suffix));
+  all_kernels.push_str(&tensor::padding_source(&type_name, &type_suffix));
+  all_kernels.push_str(&tensor::relu_mask_source(&type_name, &type_suffix));
+
+  for &op in &ops {
+    all_kernels.push_str(&tensor::elementwise_op_source(op, &type_name, &type_suffix));
+    /*
+    all_kernels.push_str(&tensor::elementwise_op_scalar_r_source(
+      op,
+      &type_name,
+      &type_suffix,
+    ));
+    all_kernels.push_str(&tensor::elementwise_op_scalar_l_source(
+      op,
+      &type_name,
+      &type_suffix,
+    ));
+    */
   }
 
   all_kernels

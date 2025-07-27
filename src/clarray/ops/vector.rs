@@ -40,15 +40,15 @@ where
     .queue(lhs.env.queue.clone())
     .global_work_size(lhs.shape)
     .arg(&lhs.buffer)
-    .arg(lhs.strides[0] as i32)
-    .arg(lhs.offset[0] as i32)
+    .arg(lhs.strides[0] as u64)
+    .arg(lhs.offset[0] as u64)
     .arg(&rhs.buffer)
-    .arg(rhs.strides[0] as i32)
-    .arg(rhs.offset[0] as i32)
+    .arg(rhs.strides[0] as u64)
+    .arg(rhs.offset[0] as u64)
     .arg(&output.buffer)
-    .arg(output.strides[0] as i32)
-    .arg(output.offset[0] as i32)
-    .arg(lhs.shape[0] as i32)
+    .arg(output.strides[0] as u64)
+    .arg(output.offset[0] as u64)
+    .arg(lhs.shape[0] as u64)
     .build()?;
 
   unsafe {
@@ -80,12 +80,12 @@ where
     .global_work_size(rhs.shape)
     .arg(lhs)
     .arg(&rhs.buffer)
-    .arg(rhs.strides[0] as i32)
-    .arg(rhs.offset[0] as i32)
+    .arg(rhs.strides[0] as u64)
+    .arg(rhs.offset[0] as u64)
     .arg(&output.buffer)
-    .arg(output.strides[0] as i32)
-    .arg(output.offset[0] as i32)
-    .arg(rhs.shape[0] as i32)
+    .arg(output.strides[0] as u64)
+    .arg(output.offset[0] as u64)
+    .arg(rhs.shape[0] as u64)
     .build()?;
 
   unsafe {
@@ -114,13 +114,13 @@ where
     .queue(lhs.env.queue.clone())
     .global_work_size(lhs.shape)
     .arg(&lhs.buffer)
-    .arg(lhs.strides[0] as i32)
-    .arg(lhs.offset[0] as i32)
+    .arg(lhs.strides[0] as u64)
+    .arg(lhs.offset[0] as u64)
     .arg(rhs)
     .arg(&output.buffer)
-    .arg(output.strides[0] as i32)
-    .arg(output.offset[0] as i32)
-    .arg(lhs.shape[0] as i32)
+    .arg(output.strides[0] as u64)
+    .arg(output.offset[0] as u64)
+    .arg(lhs.shape[0] as u64)
     .build()?;
 
   unsafe {
@@ -143,11 +143,13 @@ macro_rules! impl_matrix_op_vec {
   };
 }
 
+/*
 impl_matrix_op_vec!(Add, add, elementwise_op, "+");
 impl_matrix_op_vec!(Sub, sub, elementwise_op, "-");
 impl_matrix_op_vec!(Mul, mul, elementwise_op, "*");
 impl_matrix_op_vec!(Div, div, elementwise_op, "/");
 impl_matrix_op_vec!(Rem, rem, elementwise_op, "%");
+*/
 
 macro_rules! impl_matrix_op_r_vec {
   ($trait:ident, $method:ident, $func:ident, $op_symbol:expr) => {
@@ -197,6 +199,18 @@ where
   T: OclComputeNum,
 {
   pub fn broadcast_matrix(&self, rows: usize) -> Result<GPUMatrix<T>, Error> {
+    let output = GPUMatrix {
+      buffer: self.buffer.clone(),
+      strides: [0, self.strides[0]],
+      offset: [0, self.offset[0]],
+      shape: [rows, self.shape[0]],
+      env: self.env.clone(),
+    };
+    Ok(output)
+  }
+
+  /*
+  pub fn broadcast_matrix(&self, rows: usize) -> Result<GPUMatrix<T>, Error> {
     let output = GPUMatrix::zeros([rows, self.shape[0]], self.env.clone())?;
 
     let type_suffix = std::any::type_name::<T>();
@@ -209,22 +223,22 @@ where
       .queue(self.env.queue.clone())
       .global_work_size([rows, self.shape[0]])
       .arg(&self.buffer)
-      .arg(self.strides[0] as i32)
-      .arg(self.offset[0] as i32)
+      .arg(self.strides[0] as u64)
+      .arg(self.offset[0] as u64)
       .arg(&output.buffer)
-      .arg(output.strides[0] as i32)
-      .arg(output.strides[1] as i32)
-      .arg(output.offset[0] as i32)
-      .arg(output.offset[1] as i32)
-      .arg(rows as i32)
-      .arg(self.shape[0] as i32)
+      .arg(output.strides[0] as u64)
+      .arg(output.strides[1] as u64)
+      .arg(output.offset[0] as u64)
+      .arg(output.offset[1] as u64)
+      .arg(rows as u64)
+      .arg(self.shape[0] as u64)
       .build()?;
 
     unsafe {
       kernel.enq()?;
     }
     Ok(output)
-  }
+  }*/
 
   pub fn sum(&self) -> Result<T, Error> {
     let type_suffix = std::any::type_name::<T>();
@@ -243,10 +257,10 @@ where
       .queue(self.env.queue.clone())
       .global_work_size(1)
       .arg(&self.buffer)
-      .arg(self.strides[0] as i32)
-      .arg(self.offset[0] as i32)
+      .arg(self.strides[0] as u64)
+      .arg(self.offset[0] as u64)
       .arg(&output_buffer)
-      .arg(self.shape[0] as i32)
+      .arg(self.shape[0] as u64)
       .build()?;
 
     unsafe {

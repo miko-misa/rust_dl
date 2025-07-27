@@ -1,3 +1,5 @@
+use std::env;
+
 use num_traits::{Bounded, Num};
 use ocl::{Kernel, OclPrm, core::OclNum};
 
@@ -12,7 +14,7 @@ use crate::clarray::{
     },
     op_to_suffix,
   },
-  tensor::{GPUMatrix, OclComputeNum},
+  tensor::{GPUMatrix, GPUTensor, OclComputeNum},
 };
 
 fn elementwise_op<T>(
@@ -43,22 +45,22 @@ where
     .queue(lhs.env.queue.clone())
     .global_work_size(lhs.shape)
     .arg(&lhs.buffer)
-    .arg(lhs.strides[0] as i32)
-    .arg(lhs.strides[1] as i32)
-    .arg(lhs.offset[0] as i32)
-    .arg(lhs.offset[1] as i32)
+    .arg(lhs.strides[0] as u64)
+    .arg(lhs.strides[1] as u64)
+    .arg(lhs.offset[0] as u64)
+    .arg(lhs.offset[1] as u64)
     .arg(&rhs.buffer)
-    .arg(rhs.strides[0] as i32)
-    .arg(rhs.strides[1] as i32)
-    .arg(rhs.offset[0] as i32)
-    .arg(rhs.offset[1] as i32)
+    .arg(rhs.strides[0] as u64)
+    .arg(rhs.strides[1] as u64)
+    .arg(rhs.offset[0] as u64)
+    .arg(rhs.offset[1] as u64)
     .arg(&output.buffer)
-    .arg(output.strides[0] as i32)
-    .arg(output.strides[1] as i32)
-    .arg(output.offset[0] as i32)
-    .arg(output.offset[1] as i32)
-    .arg(lhs.shape[0] as i32)
-    .arg(lhs.shape[1] as i32)
+    .arg(output.strides[0] as u64)
+    .arg(output.strides[1] as u64)
+    .arg(output.offset[0] as u64)
+    .arg(output.offset[1] as u64)
+    .arg(lhs.shape[0] as u64)
+    .arg(lhs.shape[1] as u64)
     .build()?;
 
   unsafe {
@@ -90,17 +92,17 @@ where
     .global_work_size(rhs.shape)
     .arg(lhs)
     .arg(&rhs.buffer)
-    .arg(rhs.strides[0] as i32)
-    .arg(rhs.strides[1] as i32)
-    .arg(rhs.offset[0] as i32)
-    .arg(rhs.offset[1] as i32)
+    .arg(rhs.strides[0] as u64)
+    .arg(rhs.strides[1] as u64)
+    .arg(rhs.offset[0] as u64)
+    .arg(rhs.offset[1] as u64)
     .arg(&output.buffer)
-    .arg(output.strides[0] as i32)
-    .arg(output.strides[1] as i32)
-    .arg(output.offset[0] as i32)
-    .arg(output.offset[1] as i32)
-    .arg(rhs.shape[0] as i32)
-    .arg(rhs.shape[1] as i32)
+    .arg(output.strides[0] as u64)
+    .arg(output.strides[1] as u64)
+    .arg(output.offset[0] as u64)
+    .arg(output.offset[1] as u64)
+    .arg(rhs.shape[0] as u64)
+    .arg(rhs.shape[1] as u64)
     .build()?;
 
   unsafe {
@@ -114,7 +116,7 @@ fn elementwise_op_r<T>(lhs: &GPUMatrix<T>, rhs: &T, op: &str) -> Result<GPUMatri
 where
   T: OclComputeNum,
 {
-  let output = GPUMatrix::zeros(lhs.shape, lhs.env.clone())?;
+  let output = GPUMatrix::zeros(lhs.shape, env())?;
 
   let type_suffix = std::any::type_name::<T>();
 
@@ -131,18 +133,18 @@ where
     .queue(lhs.env.queue.clone())
     .global_work_size(lhs.shape)
     .arg(&lhs.buffer)
-    .arg(lhs.strides[0] as i32)
-    .arg(lhs.strides[1] as i32)
-    .arg(lhs.offset[0] as i32)
-    .arg(lhs.offset[1] as i32)
+    .arg(lhs.strides[0] as u64)
+    .arg(lhs.strides[1] as u64)
+    .arg(lhs.offset[0] as u64)
+    .arg(lhs.offset[1] as u64)
     .arg(rhs)
     .arg(&output.buffer)
-    .arg(output.strides[0] as i32)
-    .arg(output.strides[1] as i32)
-    .arg(output.offset[0] as i32)
-    .arg(output.offset[1] as i32)
-    .arg(lhs.shape[0] as i32)
-    .arg(lhs.shape[1] as i32)
+    .arg(output.strides[0] as u64)
+    .arg(output.strides[1] as u64)
+    .arg(output.offset[0] as u64)
+    .arg(output.offset[1] as u64)
+    .arg(lhs.shape[0] as u64)
+    .arg(lhs.shape[1] as u64)
     .build()?;
 
   unsafe {
@@ -166,11 +168,13 @@ macro_rules! impl_matrix_op {
   };
 }
 
+/*
 impl_matrix_op!(Add, add, elementwise_op, "+");
 impl_matrix_op!(Sub, sub, elementwise_op, "-");
 impl_matrix_op!(Mul, mul, elementwise_op, "*");
 impl_matrix_op!(Div, div, elementwise_op, "/");
 impl_matrix_op!(Rem, rem, elementwise_op, "%");
+*/
 
 macro_rules! impl_matrix_op_r {
   ($trait:ident, $method:ident, $func:ident, $op_symbol:expr) => {
@@ -243,50 +247,29 @@ where
       .queue(self.env.queue.clone())
       .global_work_size(output_shape)
       .arg(&self.buffer)
-      .arg(self.strides[0] as i32)
-      .arg(self.strides[1] as i32)
-      .arg(self.offset[0] as i32)
-      .arg(self.offset[1] as i32)
+      .arg(self.strides[0] as u64)
+      .arg(self.strides[1] as u64)
+      .arg(self.offset[0] as u64)
+      .arg(self.offset[1] as u64)
       .arg(&rhs.buffer)
-      .arg(rhs.strides[0] as i32)
-      .arg(rhs.strides[1] as i32)
-      .arg(rhs.offset[0] as i32)
-      .arg(rhs.offset[1] as i32)
+      .arg(rhs.strides[0] as u64)
+      .arg(rhs.strides[1] as u64)
+      .arg(rhs.offset[0] as u64)
+      .arg(rhs.offset[1] as u64)
       .arg(&output.buffer)
-      .arg(output.strides[0] as i32)
-      .arg(output.strides[1] as i32)
-      .arg(output.offset[0] as i32)
-      .arg(output.offset[1] as i32)
-      .arg(self.shape[0] as i32)
-      .arg(rhs.shape[1] as i32)
-      .arg(k as i32)
+      .arg(output.strides[0] as u64)
+      .arg(output.strides[1] as u64)
+      .arg(output.offset[0] as u64)
+      .arg(output.offset[1] as u64)
+      .arg(self.shape[0] as u64)
+      .arg(rhs.shape[1] as u64)
+      .arg(k as u64)
       .build()?;
 
     unsafe {
       kernel.enq()?;
     }
 
-    Ok(output)
-  }
-
-  pub fn mapv<F>(&self, f: F) -> Result<GPUMatrix<T>, Error>
-  where
-    F: Fn(T) -> T + Send + Sync,
-  {
-    let output = GPUMatrix::zeros(self.shape.clone(), self.env.clone())?;
-    let mut data = vec![T::default(); self.buffer.len()];
-    self.env.queue.finish().map_err(|e| Error::OclError(e))?;
-    self
-      .buffer
-      .read(&mut data)
-      .enq()
-      .map_err(|e| Error::OclError(e))?;
-    let mapped_data: Vec<T> = data.into_iter().map(f).collect();
-    output
-      .buffer
-      .write(&mapped_data)
-      .enq()
-      .map_err(|e| Error::OclError(e))?;
     Ok(output)
   }
 
@@ -301,19 +284,19 @@ where
       .queue(self.env.queue.clone())
       .global_work_size(self.shape)
       .arg(&self.buffer)
-      .arg(self.strides[0] as i32)
-      .arg(self.strides[1] as i32)
-      .arg(self.offset[0] as i32)
-      .arg(self.offset[1] as i32)
+      .arg(self.strides[0] as u64)
+      .arg(self.strides[1] as u64)
+      .arg(self.offset[0] as u64)
+      .arg(self.offset[1] as u64)
       .arg(&output.buffer)
-      .arg(output.strides[0] as i32)
-      .arg(output.strides[1] as i32)
-      .arg(output.offset[0] as i32)
-      .arg(output.offset[1] as i32)
+      .arg(output.strides[0] as u64)
+      .arg(output.strides[1] as u64)
+      .arg(output.offset[0] as u64)
+      .arg(output.offset[1] as u64)
       .arg(min as T)
       .arg(max as T)
-      .arg(self.shape[0] as i32)
-      .arg(self.shape[1] as i32)
+      .arg(self.shape[0] as u64)
+      .arg(self.shape[1] as u64)
       .build()?;
     unsafe {
       kernel.enq()?;
@@ -331,5 +314,93 @@ where
       .data
       .into_iter()
       .fold(Ok(T::zero()), |acc, x| acc.and_then(|sum| Ok(sum + x)))
+  }
+
+  pub fn col2im(
+    &self,
+    filter_size: [usize; 3],
+    stride: [usize; 3],
+    output_shape: [usize; 4],
+  ) -> Result<GPUTensor<T, [usize; 4]>, Error> {
+    let [batch_size, channels, height, width] = output_shape;
+    let output = GPUTensor::zeros(output_shape, self.env.clone())?;
+
+    let input_shape = [
+      (channels - filter_size[0]) / stride[0] + 1,
+      (height - filter_size[1]) / stride[1] + 1,
+      (width - filter_size[2]) / stride[2] + 1,
+    ];
+
+    let type_suffix = std::any::type_name::<T>();
+    let kernel_name = format!("col2im_{}", type_suffix);
+    let program = self.env.get_or_compile_program(&type_suffix)?;
+    let kernel = Kernel::builder()
+      .program(&program)
+      .name(&kernel_name)
+      .queue(self.env.queue.clone())
+      .global_work_size([batch_size, self.shape[0] / batch_size, self.shape[1]])
+      .arg(&self.buffer)
+      .arg(self.strides[0] as u64)
+      .arg(self.strides[1] as u64)
+      .arg(self.offset[0] as u64)
+      .arg(self.offset[1] as u64)
+      .arg(&output.buffer)
+      .arg(output.strides[0] as u64)
+      .arg(output.strides[1] as u64)
+      .arg(output.strides[2] as u64)
+      .arg(output.strides[3] as u64)
+      .arg(output.offset[0] as u64)
+      .arg(output.offset[1] as u64)
+      .arg(output.offset[2] as u64)
+      .arg(output.offset[3] as u64)
+      .arg((filter_size[1] * filter_size[2]) as u64)
+      .arg(filter_size[2] as u64)
+      .arg(1 as u64)
+      .arg(input_shape[0] as u64)
+      .arg(input_shape[1] as u64)
+      .arg(input_shape[2] as u64)
+      .arg(stride[0] as u64)
+      .arg(stride[1] as u64)
+      .arg(stride[2] as u64)
+      .build()?;
+    unsafe {
+      kernel.enq()?;
+    }
+    Ok(output)
+  }
+
+  pub fn row_max_mask(&self) -> Result<GPUMatrix<T>, Error>
+  where
+    T: OclComputeNum + Num + Bounded,
+  {
+    let type_suffix = std::any::type_name::<T>();
+    let kernel_name = format!("row_max_mask_mat_{}", type_suffix);
+    let program = self.env.get_or_compile_program(&type_suffix)?;
+    let output = GPUMatrix::zeros(self.shape, self.env.clone())?;
+
+    let kernel = Kernel::builder()
+      .program(&program)
+      .name(&kernel_name)
+      .queue(self.env.queue.clone())
+      .global_work_size([self.shape[0]])
+      .arg(&self.buffer)
+      .arg(self.strides[0] as u64)
+      .arg(self.strides[1] as u64)
+      .arg(self.offset[0] as u64)
+      .arg(self.offset[1] as u64)
+      .arg(&output.buffer)
+      .arg(output.strides[0] as u64)
+      .arg(output.strides[1] as u64)
+      .arg(output.offset[0] as u64)
+      .arg(output.offset[1] as u64)
+      .arg(self.shape[0] as u64)
+      .arg(self.shape[1] as u64)
+      .build()?;
+
+    unsafe {
+      kernel.enq()?;
+    }
+
+    Ok(output)
   }
 }
